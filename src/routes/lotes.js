@@ -5,6 +5,42 @@ const { isLoggedInn2, isLoggedInn } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const { loteCliente, loteCliente2, listadeTodos, listadeLotes, nuevolote, lista2, traerlotesleg, nuevamanzana, traermanzanas, modificarlote } = require('../controladores/lotesControlador')
 
+function geoJsonToWKT(coords) {
+  // Si es POLYGON
+  if (
+    Array.isArray(coords) &&
+    Array.isArray(coords[0]) &&
+    Array.isArray(coords[0][0]) &&
+    typeof coords[0][0][0] === 'number'
+  ) {
+    const rings = coords
+      .map(
+        ring => `(${ring.map(pair => pair.join(' ')).join(', ')})`
+      )
+      .join(', ');
+    return `POLYGON(${rings})`;
+  }
+
+  // Si es MULTIPOLYGON
+  if (
+    Array.isArray(coords) &&
+    Array.isArray(coords[0]) &&
+    Array.isArray(coords[0][0]) &&
+    Array.isArray(coords[0][0][0])
+  ) {
+    const polygons = coords
+      .map(
+        polygon =>
+          `(${polygon
+            .map(ring => `(${ring.map(pair => pair.join(' ')).join(', ')})`)
+            .join(', ')})`
+      )
+      .join(', ');
+    return `MULTIPOLYGON(${polygons})`;
+  }
+
+  throw new Error('Formato de coordenadas no válido para WKT');
+}
 
 
 
@@ -612,6 +648,49 @@ router.post('/calcularvalor', async (req, res) => {
     } else { res.send('Algo salio mal ') }
 
 })
+
+
+router.post('/guardarpoligono', async (req, res) => {
+  try {
+    const { dato1, dato2, coordenadas } = req.body;
+console.log(dato1, dato2, coordenadas )
+    if (!coordenadas || !Array.isArray(coordenadas)) {
+      return res.status(400).json({ error: 'Coordenadas no válidas' });
+    }
+
+
+ await pool.query(
+  `INSERT INTO poligonos (dato1, dato2, coordenadas) VALUES (?, ?, ?)`,
+  [dato1, dato2, JSON.stringify(coordenadas)]
+);
+
+    res.json({ mensaje: 'Polígono guardado correctamente' });
+  } catch (error) {
+    console.error('Error al guardar polígono:', error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+
+router.get('/poligonosguardados', async (req, res) => {
+  try {
+    const rows = await pool.query('SELECT * FROM poligonos');
+
+    const resultados = rows.map((row) => ({
+      id: row.id,
+      dato1: row.dato1,
+      dato2: row.dato2,
+      coordenadas: typeof row.coordenadas == 'string'
+        ? JSON.parse(row.coordenadas)
+        : row.coordenadas,
+    }));
+
+    res.json(resultados);
+  } catch (error) {
+    console.error('Error al obtener polígonos:', error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
 
 
 module.exports = router
