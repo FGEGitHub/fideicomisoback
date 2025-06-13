@@ -652,19 +652,32 @@ router.post('/calcularvalor', async (req, res) => {
 
 router.post('/guardarpoligono', async (req, res) => {
   try {
-    const { dato1, dato2, coordenadas } = req.body;
-console.log(dato1, dato2, coordenadas )
-    if (!coordenadas || !Array.isArray(coordenadas)) {
-      return res.status(400).json({ error: 'Coordenadas no válidas' });
+    const { dato1, capa, id_mapa } = req.body;
+    console.log(dato1, capa, id_mapa);
+
+
+
+    // Consultar si ya existe
+    const rows = await pool.query(
+      `SELECT * FROM poligonos WHERE capa = ? AND id_mapa = ?`,
+      [capa, id_mapa]
+    );
+
+    if (rows.length > 0) {
+      // Ya existe: actualizar
+      await pool.query(
+        `UPDATE poligonos SET dato1 = ? WHERE capa = ? AND id_mapa = ?`,
+        [dato1, capa, id_mapa]
+      );
+      res.json({ mensaje: 'Polígono actualizado correctamente' });
+    } else {
+      // No existe: insertar
+      await pool.query(
+        `INSERT INTO poligonos (dato1, capa, id_mapa) VALUES (?, ?, ?)`,
+        [dato1, capa, id_mapa]
+      );
+      res.json({ mensaje: 'Polígono guardado correctamente' });
     }
-
-
- await pool.query(
-  `INSERT INTO poligonos (dato1, dato2, coordenadas) VALUES (?, ?, ?)`,
-  [dato1, dato2, JSON.stringify(coordenadas)]
-);
-
-    res.json({ mensaje: 'Polígono guardado correctamente' });
   } catch (error) {
     console.error('Error al guardar polígono:', error);
     res.status(500).json({ error: 'Error del servidor' });
@@ -675,17 +688,8 @@ console.log(dato1, dato2, coordenadas )
 router.get('/poligonosguardados', async (req, res) => {
   try {
     const rows = await pool.query('SELECT * FROM poligonos');
-
-    const resultados = rows.map((row) => ({
-      id: row.id,
-      dato1: row.dato1,
-      dato2: row.dato2,
-      coordenadas: typeof row.coordenadas == 'string'
-        ? JSON.parse(row.coordenadas)
-        : row.coordenadas,
-    }));
-
-    res.json(resultados);
+console.log(rows)
+    res.json(rows);
   } catch (error) {
     console.error('Error al obtener polígonos:', error);
     res.status(500).json({ error: 'Error del servidor' });
