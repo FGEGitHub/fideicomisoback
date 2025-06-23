@@ -649,35 +649,71 @@ router.post('/calcularvalor', async (req, res) => {
 
 })
 
-
 router.post('/guardarpoligono', async (req, res) => {
+    
   try {
-    const { dato1, capa, id_mapa } = req.body;
-    console.log(dato1, capa, id_mapa);
+    const {
+      id_mapa,
+      dato1 = null,
+      capa = null,
+      subclasificacion = null,
+      descripcion = null
+    } = req.body;
+console.log(dato1)
+console.log(typeof(dato1))
+    if (!id_mapa) {
+      return res.status(400).json({ error: "El campo 'id_mapa' es obligatorio." });
+    }
 
-
-
-    // Consultar si ya existe
+    // Buscar si ya existe el polígono con ese id_mapa (y opcionalmente capa si querés más precisión)
     const rows = await pool.query(
-      `SELECT * FROM poligonos WHERE capa = ? AND id_mapa = ?`,
-      [capa, id_mapa]
+      `SELECT * FROM poligonos WHERE id_mapa = ?`,
+      [id_mapa]
     );
 
     if (rows.length > 0) {
-      // Ya existe: actualizar
-      await pool.query(
-        `UPDATE poligonos SET dato1 = ? WHERE capa = ? AND id_mapa = ?`,
-        [dato1, capa, id_mapa]
-      );
+      // Ya existe: actualizar solo los campos que se enviaron
+      const updates = [];
+      const values = [];
+
+      if ((dato1 != null) && (dato1 != "") )  {
+        console.log(dato1)
+        updates.push("dato1 = ?");
+        values.push(dato1);
+      }
+      if ((subclasificacion != null) && (dato1 != "") ) {
+        updates.push("subclasificacion = ?");
+        values.push(subclasificacion);
+      }
+      if (descripcion !== null) {
+        updates.push("descripcion = ?");
+        values.push(descripcion);
+      }
+      if (capa != null) {
+        updates.push("capa = ?");
+        values.push(capa);
+      }
+
+      if (updates.length > 0) {
+        values.push(id_mapa);
+        await pool.query(
+          `UPDATE poligonos SET ${updates.join(", ")} WHERE id_mapa = ?`,
+          values
+        );
+      }
+
       res.json({ mensaje: 'Polígono actualizado correctamente' });
+
     } else {
-      // No existe: insertar
+      // Insertar nuevo polígono
       await pool.query(
-        `INSERT INTO poligonos (dato1, capa, id_mapa) VALUES (?, ?, ?)`,
-        [dato1, capa, id_mapa]
+        `INSERT INTO poligonos (id_mapa, dato1, subclasificacion, descripcion, capa)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id_mapa, dato1, subclasificacion, descripcion, capa]
       );
       res.json({ mensaje: 'Polígono guardado correctamente' });
     }
+
   } catch (error) {
     console.error('Error al guardar polígono:', error);
     res.status(500).json({ error: 'Error del servidor' });
@@ -688,7 +724,7 @@ router.post('/guardarpoligono', async (req, res) => {
 router.get('/poligonosguardados', async (req, res) => {
   try {
     const rows = await pool.query('SELECT * FROM poligonos');
-console.log(rows)
+
     res.json(rows);
   } catch (error) {
     console.error('Error al obtener polígonos:', error);
