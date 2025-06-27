@@ -659,8 +659,7 @@ router.post('/guardarpoligono', async (req, res) => {
       subclasificacion = null,
       descripcion = null
     } = req.body;
-console.log(dato1)
-console.log(typeof(dato1))
+
     if (!id_mapa) {
       return res.status(400).json({ error: "El campo 'id_mapa' es obligatorio." });
     }
@@ -681,7 +680,7 @@ console.log(typeof(dato1))
         updates.push("dato1 = ?");
         values.push(dato1);
       }
-      if ((subclasificacion != null) && (dato1 != "") ) {
+      if ((subclasificacion != null) ) {
         updates.push("subclasificacion = ?");
         values.push(subclasificacion);
       }
@@ -693,7 +692,7 @@ console.log(typeof(dato1))
         updates.push("capa = ?");
         values.push(capa);
       }
-
+console.log(updates)
       if (updates.length > 0) {
         values.push(id_mapa);
         await pool.query(
