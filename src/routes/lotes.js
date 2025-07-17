@@ -676,7 +676,7 @@ router.post('/guardarpoligono', async (req, res) => {
       const values = [];
 
       if ((dato1 != null) && (dato1 != "") )  {
-        console.log(dato1)
+       
         updates.push("dato1 = ?");
         values.push(dato1);
       }

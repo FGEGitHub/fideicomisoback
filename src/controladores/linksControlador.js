@@ -10,7 +10,7 @@ const sacarguion = require('../public/apps/transformarcuit')
 const nodemailer = require("nodemailer");
 const enviodemail = require('../routes/Emails/Enviodemail')
 const traerriesgo =  require('../routes/funciones/riesgo')
-
+const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
 function calcularEdad(fechaNacimiento) {
@@ -25,54 +25,54 @@ function calcularEdad(fechaNacimiento) {
 }
 // Función para buscar en la página
 const buscarEnPagina = async (nombreCompleto) => {
-    try {
-      const url = 'https://repet.jus.gob.ar/';
-      const response = await axios.get(url);
-      const html = response.data;
-      const $ = cheerio.load(html);
-  
-      const pageText = $('body').text();
-      const lines = pageText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  
-      const palabras = nombreCompleto
-        .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Eliminar tildes
-        .split(/[\s\-’‘'"]+/)
-        /////modificaicon
-        .filter(word => word.length > 0);
-  
-      const totalPalabras = palabras.length;
-      const palabrasNecesarias = totalPalabras > 3 ? totalPalabras - 1 : totalPalabras;
-  
-      let coincidencias = [];
-      for (const line of lines) {
-        const palabrasExactas = palabras.filter(palabra =>
-          line
-            .toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .includes(palabra)
-        );
-  
-        const palabrasSospechosas = palabras.filter(palabra =>
-          !palabrasExactas.includes(palabra) && // Evitar duplicar palabras ya exactas
-          line
-            .toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .split(' ')
-            .some(palabraLinea => diferenciaLetras(palabra, palabraLinea) <= 1)
-        );
-  
-        if (palabrasExactas.length + palabrasSospechosas.length >= palabrasNecesarias) {
-          coincidencias.push({ linea: line, palabrasExactas, palabrasSospechosas });
-        }
+  try {
+    const url = 'https://repet.jus.gob.ar/';
+    
+    // ⚠️ Esta parte ignora problemas de SSL (solo para pruebas o sitios no confiables)
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+    const response = await axios.get(url, { httpsAgent });
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    const pageText = $('body').text();
+    const lines = pageText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+    const palabras = nombreCompleto
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quita tildes
+      .split(/[\s\-’‘'"]+/)
+      .filter(word => word.length > 0);
+
+    const totalPalabras = palabras.length;
+    const palabrasNecesarias = totalPalabras > 3 ? totalPalabras - 1 : totalPalabras;
+
+    let coincidencias = [];
+
+    for (const line of lines) {
+      const lineaNormalizada = line.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const palabrasExactas = palabras.filter(palabra =>
+        lineaNormalizada.includes(palabra)
+      );
+
+      const palabrasSospechosas = palabras.filter(palabra =>
+        !palabrasExactas.includes(palabra) &&
+        lineaNormalizada.split(' ').some(palabraLinea => diferenciaLetras(palabra, palabraLinea) <= 1)
+      );
+
+      if (palabrasExactas.length + palabrasSospechosas.length >= palabrasNecesarias) {
+        coincidencias.push({ linea: line, palabrasExactas, palabrasSospechosas });
       }
-  
-      return coincidencias.length > 0 ? coincidencias : null;
-    } catch (error) {
-      console.error('Error al buscar en la página:', error);
-      return null;
     }
-  };
+
+    return coincidencias.length > 0 ? coincidencias : null;
+
+  } catch (error) {
+    console.error('Error al buscar en la página:', error.message);
+    return null;
+  }
+};
   
   // Función para calcular la diferencia de letras entre dos palabras
   const diferenciaLetras = (str1, str2) => {
