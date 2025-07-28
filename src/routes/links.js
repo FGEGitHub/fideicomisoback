@@ -12,6 +12,7 @@ const { determinarEmpresa, habilitar, estadisticasLegajos, deshabilitar, borrarC
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const cron = require('node-cron');
+const https = require('https');
 /////////aws
 const cheerio = require('cheerio');
 
@@ -632,16 +633,17 @@ try {
 // Función principal
 const busquedarenapet = async () => {
   try {
-    // Obtener datos de la base de datos
     const clientes = await pool.query('SELECT * FROM clientes');
+    
     if (!clientes.length) {
       console.log('No se encontraron clientes en la base de datos.');
       return { mensaje: 'No se encontraron clientes en la base de datos.', clientesAnalizados: 0 };
     }
 
-    // Obtener y procesar la página
     const url = 'https://repet.jus.gob.ar/';
-    const response = await axios.get(url);
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false }); // ⚠️ solución
+    const response = await axios.get(url, { httpsAgent });
+
     const html = response.data;
     const $ = cheerio.load(html);
 
@@ -663,14 +665,9 @@ const busquedarenapet = async () => {
 
         const regexPalabras = palabras.map(palabra => new RegExp(`\\b${escapeRegExp(palabra)}\\b`, 'i'));
 
-        let matchedLines = [];
-
-        lines.forEach(line => {
-          const coincidencias = regexPalabras.every(regex => regex.test(line));
-          if (coincidencias) {
-            matchedLines.push(line);
-          }
-        });
+        const matchedLines = lines.filter(line =>
+          regexPalabras.every(regex => regex.test(line))
+        );
 
         if (matchedLines.length > 0) {
           allResults.push({
@@ -701,7 +698,7 @@ const busquedarenapet = async () => {
 
 
 // Configurar el cron para ejecutar la función todos los días a las 16:35
-cron.schedule('00 9 * * *', async () => {
+cron.schedule('31 9 * * *', async () => {
   console.log('Iniciando la búsqueda automática a las 19:00...');
 
   const { resultados, clientesAnalizados, mensaje, error } = await busquedarenapet();
