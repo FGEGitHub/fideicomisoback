@@ -689,7 +689,7 @@ const borrarCbu = async (req, res) => {
 
 const cantidadInfo = async (req, res) => {
     try {
-    
+
         // Obtener clientes con prioridad en los que tienen al menos una cuota
         const clientes = await pool.query(`
             SELECT c.*, 
@@ -711,13 +711,16 @@ const cantidadInfo = async (req, res) => {
             })
         );
 
+        // 🔥 ORDENAR POR PORCENTAJE DE MAYOR A MENOR
+        clientesConPorcentaje.sort((a, b) => b.porcentaje - a.porcentaje);
+
         res.json(clientesConPorcentaje);
+
     } catch (error) {
         console.error("Error al obtener clientes:", error);
         res.status(500).json({ error: "Ocurrió un error al obtener los clientes" });
     }
 };
-
 
 
 
