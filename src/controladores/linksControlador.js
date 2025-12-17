@@ -686,32 +686,82 @@ const borrarCbu = async (req, res) => {
 
 
 }
-
 const cantidadInfo = async (req, res) => {
     try {
 
-        // Obtener clientes con prioridad en los que tienen al menos una cuota
         const clientes = await pool.query(`
-            SELECT c.*, 
-                   CASE WHEN EXISTS (SELECT 1 FROM cuotas q WHERE q.cuil_cuit = c.cuil_cuit) 
-                        THEN 1 ELSE 0 
-                   END AS tiene_cuota
+            SELECT 
+                c.*,
+
+                CASE 
+                    WHEN (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ) IS NOT NULL 
+                    THEN 1 
+                    ELSE 0 
+                END AS tiene_cuota,
+
+                -- Año última cuota
+                FLOOR(
+                    (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ) / 100
+                ) AS ultima_cuota_anio,
+
+                -- Mes última cuota
+                MOD(
+                    (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ),
+                    100
+                ) AS ultima_cuota_mes
+
             FROM clientes c
+
+            -- Cuotas normales (por cuil_cuit)
+            LEFT JOIN (
+                SELECT 
+                    q.cuil_cuit,
+                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                FROM cuotas q
+                GROUP BY q.cuil_cuit
+            ) uc ON uc.cuil_cuit = c.cuil_cuit
+
+            -- Cuotas IC3 (por id_cliente)
+            LEFT JOIN (
+                SELECT 
+                    q.id_cliente,
+                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                FROM cuotas_ic3 q
+                GROUP BY q.id_cliente
+            ) uc_ic3 ON uc_ic3.id_cliente = c.id
+
             ORDER BY tiene_cuota DESC
         `);
 
-        // Calcular el porcentaje para cada cliente usando traerriesgo.matriz
         const clientesConPorcentaje = await Promise.all(
             clientes.map(async (cliente) => {
                 const porcentaje = await traerriesgo.matriz(cliente);
+
                 return {
                     ...cliente,
                     porcentaje,
+                    ultimaCuota: cliente.ultima_cuota_anio
+                        ? `${String(cliente.ultima_cuota_mes).padStart(2, '0')}/${cliente.ultima_cuota_anio}`
+                        : null
                 };
             })
         );
 
-        // 🔥 ORDENAR POR PORCENTAJE DE MAYOR A MENOR
         clientesConPorcentaje.sort((a, b) => b.porcentaje - a.porcentaje);
 
         res.json(clientesConPorcentaje);
