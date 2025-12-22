@@ -15,7 +15,7 @@ const cron = require('node-cron');
 const https = require('https');
 /////////aws
 const cheerio = require('cheerio');
-
+const traerriesgo =  require('./funciones/riesgo')
 const diskstorage = multer.diskStorage({
     destination: path.join(__dirname, '../../pdfs'),
     filename: (req, file, cb) => {
@@ -352,21 +352,42 @@ enviodemail.enviarmail.enviarmail(email,asunto,encabezado,mensaje)
 
 router.get('/listaic3', async (req, res) => {
   try {
-    const resultados = await pool.query(`
-      SELECT c.Nombre, ci.mes, ci.anio, c.cuil_cuit
+    const clientes = await pool.query(`
+      SELECT 
+        c.id,
+        c.Nombre,
+        c.cuil_cuit,
+        ci.mes,
+        ci.anio
       FROM clientes c
       LEFT JOIN cuotas_ic3 ci ON ci.id_cliente = c.id
       INNER JOIN (
-          SELECT id_cliente, MAX(anio * 100 + mes) as max_fecha
+          SELECT id_cliente, MAX(anio * 100 + mes) AS max_fecha
           FROM cuotas_ic3
           GROUP BY id_cliente
-      ) ultimas ON ultimas.id_cliente = ci.id_cliente
-              AND (ci.anio * 100 + ci.mes) = ultimas.max_fecha
+      ) ultimas 
+        ON ultimas.id_cliente = ci.id_cliente
+       AND (ci.anio * 100 + ci.mes) = ultimas.max_fecha
       WHERE c.zona = "IC3  "
       ORDER BY ci.anio DESC, ci.mes DESC
     `);
 
-    res.json(resultados);
+    const clientesConRiesgo = await Promise.all(
+      clientes.map(async (cliente) => {
+        const riesgo = await traerriesgo.matriz(cliente); // ← número
+
+        return {
+          ...cliente,
+          riesgo,
+          ultimaCuota: cliente.anio
+            ? `${String(cliente.mes).padStart(2, '0')}/${cliente.anio}`
+            : null
+        };
+      })
+    );
+
+    res.json(clientesConRiesgo);
+
   } catch (error) {
     console.error("Error al obtener clientes y cuotas:", error);
     res.status(500).json({ error: 'Error en el servidor' });
