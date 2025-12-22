@@ -827,9 +827,16 @@ const cantidadInfo = async (req, res) => {
                 GROUP BY q.id_cliente
             ) uc_ic3 ON uc_ic3.id_cliente = c.id
 
-            WHERE c.zona IS NULL 
+            WHERE c.zona IS NULL and c.cod_zona is null
 
-            ORDER BY tiene_cuota DESC
+            ORDER BY 
+                tiene_cuota DESC,
+                (
+                    CASE 
+                        WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                        ELSE uc.ultima_cuota_num
+                    END
+                ) DESC
         `);
 
         const clientesConPorcentaje = await Promise.all(
