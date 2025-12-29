@@ -13,6 +13,7 @@ const traerriesgo =  require('../routes/funciones/riesgo')
 const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { SlowBuffer } = require('buffer')
 function calcularEdad(fechaNacimiento) {
     const hoy = new Date();
     const nacimiento = new Date(fechaNacimiento);
@@ -1042,7 +1043,6 @@ const add2 = async (req, res) => {
   
       // Buscar en la página
       const resultadosBusqueda = await buscarEnPagina(Nombre);
-  
       // Enviar correo según los resultados
       if (resultadosBusqueda) {
         const mensaje = `Se encontraron coincidencias para el cliente ${Nombre}:\n\n` +
@@ -1051,7 +1051,6 @@ const add2 = async (req, res) => {
           ).join('\n\n');
         await enviarCorreo('Resultados encontrados para cliente', mensaje);
         await pool.query('INSERT INTO clientes SET ?', [newLink]);
-        console.log(resultadosBusqueda)
         res.json('Cliente guardado correctamente y analizado. Resultado:'+mensaje);
       } else {
         const mensaje = `No se encontraron coincidencias para el cliente ${Nombre}.`;

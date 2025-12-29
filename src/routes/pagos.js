@@ -558,17 +558,51 @@ router.post("/detallesPagocli", isLoggedInn2, async (req, res) => {
 
 
 
-
 router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
+  try {
+    const pagos = await pool.query(`
+      
+      SELECT
+        p.id            AS id_pago,
+        p.monto,
+        p.cuil_cuit,
+        sel.mes,
+        sel.anio,
+        c.id            AS id_cliente,
+        c.nombre,
+      
+        'normal'        AS origen
+      FROM pagos p
+      LEFT JOIN cuotas sel ON p.id_cuota = sel.id
+      LEFT JOIN clientes c ON sel.cuil_cuit = c.cuil_cuit
+      WHERE c.zona <> 'IC3'
 
+      UNION ALL
 
-    const pagos = await pool.query('SELECT * FROM pagos left join (select mes, anio, id as idc, cuil_cuit as cui from cuotas ) as sel  on pagos.id_cuota=sel.idc left join clientes on sel.cui = clientes.cuil_cuit ')
+      SELECT
+        pi.id           AS id_pago,
+        pi.monto,
+        pi.cuil_cuit,
+        q.mes,
+        q.anio,
+        c2.id           AS id_cliente,
+        
+        c2.nombre,
+        'ic3'           AS origen
+      FROM pagos_ic3 pi
+      JOIN cuotas_ic3 q ON pi.id_cuota = q.id
+      JOIN clientes c2 ON q.id_cliente = c2.id
+      WHERE c2.zona = 'IC3'
 
+      ORDER BY anio DESC, mes DESC;
+    `);
+    res.json(pagos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener los pagos" });
+  }
+});
 
-
-
-    res.json(pagos)
-})
 
 
 ///////// Cantidad inusuales 

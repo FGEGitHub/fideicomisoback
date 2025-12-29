@@ -354,9 +354,7 @@ router.get('/listaic3', async (req, res) => {
   try {
     const clientes = await pool.query(`
       SELECT 
-        c.id,
-        c.Nombre,
-        c.cuil_cuit,
+        c.*,
         ci.mes,
         ci.anio
       FROM clientes c
