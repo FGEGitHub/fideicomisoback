@@ -1545,7 +1545,6 @@ async function pagonivel2(req, res) {
 
                 }
 
-                console.log('filtro', cleanedString)
                 if (monto.includes(',')) {
                     // Replace comma with a dot
                     monto.replace(',', '.');
@@ -1620,7 +1619,7 @@ if (numeroCleaned == montoNormalizado) {
         id_cbu: cbupago,
         ubicacion: filename,///////////aca ver el problema
     };
-
+console.log('guar',newLink)
     const result = await pool.query('INSERT INTO pagos SET ?', [newLink]);
     console.log(result.insertId);
     if (montomax < monto) {
