@@ -563,15 +563,21 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
     const pagos = await pool.query(`
       
       SELECT
-        p.id            AS id_pago,
+        p.id AS id_pago,
         p.monto,
         p.cuil_cuit,
         sel.mes,
         sel.anio,
-        c.id            AS id_cliente,
+        c.id AS id_cliente,
         c.nombre,
-      
-        'normal'        AS origen
+
+        CONCAT(
+          IFNULL(sel.fraccion, ''), ' Mz ',
+          IFNULL(sel.manzana, ''), ' Parc ',
+          IFNULL(sel.parcela, '')
+        ) AS lote,
+
+        'normal' AS origen
       FROM pagos p
       LEFT JOIN cuotas sel ON p.id_cuota = sel.id
       LEFT JOIN clientes c ON sel.cuil_cuit = c.cuil_cuit
@@ -580,15 +586,17 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
       UNION ALL
 
       SELECT
-        pi.id           AS id_pago,
+        pi.id AS id_pago,
         pi.monto,
         c2.cuil_cuit,
         q.mes,
         q.anio,
-        c2.id           AS id_cliente,
-        
+        c2.id AS id_cliente,
         c2.nombre,
-        'ic3'           AS origen
+
+        'Lote sin definir' AS lote,
+
+        'ic3' AS origen
       FROM pagos_ic3 pi
       JOIN cuotas_ic3 q ON pi.id_cuota = q.id
       JOIN clientes c2 ON q.id_cliente = c2.id
@@ -596,6 +604,7 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
 
       ORDER BY anio DESC, mes DESC;
     `);
+
     res.json(pagos);
   } catch (error) {
     console.error(error);

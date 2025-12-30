@@ -1761,7 +1761,7 @@ async function pagarnivel2ic3(req, res) {
                 }
 
             } catch (error) {
-                console.log(error)
+                
             }
 
         }
@@ -1773,7 +1773,7 @@ async function pagarnivel2ic3(req, res) {
     /////////////////////////////////////////////////////////////////////////////////
 
     let cliente = await pool.query('Select * from clientes where id = ? ', [cuota[0]["id_cliente"]])
-    console.log(cliente)
+    
     ///////////////////CONSIDERAR PEP
     montomaximodelicliente = await traerriesgo.montomaximodelicliente(cliente[0]);
 
