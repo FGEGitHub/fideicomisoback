@@ -828,8 +828,7 @@ const cantidadInfo = async (req, res) => {
                 GROUP BY q.id_cliente
             ) uc_ic3 ON uc_ic3.id_cliente = c.id
 
-            WHERE c.zona IS NULL and c.cod_zona is null
-
+            WHERE c.zona IS NULL or c.zona = 'corrientes'
             ORDER BY 
                 tiene_cuota DESC,
                 (
@@ -855,7 +854,7 @@ const cantidadInfo = async (req, res) => {
         );
 
         clientesConPorcentaje.sort((a, b) => b.porcentaje - a.porcentaje);
-
+console.log(clientesConPorcentaje.length)
         res.json(clientesConPorcentaje);
 
     } catch (error) {
