@@ -571,11 +571,9 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
         c.id AS id_cliente,
         c.nombre,
 
-        CONCAT(
-          IFNULL(sel.fraccion, ''), ' Mz ',
-          IFNULL(sel.manzana, ''), ' Parc ',
-          IFNULL(sel.parcela, '')
-        ) AS lote,
+        sel.fraccion AS fraccion,
+        sel.manzana  AS manzana,
+        sel.parcela  AS parcela,
 
         'normal' AS origen
       FROM pagos p
@@ -594,7 +592,9 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
         c2.id AS id_cliente,
         c2.nombre,
 
-        'Lote sin definir' AS lote,
+        'Sin determinar' AS fraccion,
+        'Sin determinar' AS manzana,
+        'Sin determinar' AS parcela,
 
         'ic3' AS origen
       FROM pagos_ic3 pi
@@ -611,7 +611,6 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
     res.status(500).json({ error: "Error al obtener los pagos" });
   }
 });
-
 
 
 ///////// Cantidad inusuales 
