@@ -1444,6 +1444,7 @@ function formatearFecha(fecha) {
 /////////////////////pagar nivel 2 directamente aprobado 
 async function pagonivel2(req, res) {
     let { id_cuota, cuil_cuit, pago, cbu, fecha } = req.body;
+    console.log(id_cuota, cuil_cuit, pago, cbu, fecha)
     const filename = req.file ? req.file.filename : 'sin comprobante';
 
    
