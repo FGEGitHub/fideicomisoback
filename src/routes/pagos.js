@@ -582,7 +582,7 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
       SELECT
         pi.id           AS id_pago,
         pi.monto,
-        pi.cuil_cuit,
+        c2.cuil_cuit,
         q.mes,
         q.anio,
         c2.id           AS id_cliente,
