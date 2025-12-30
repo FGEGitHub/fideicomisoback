@@ -1673,7 +1673,7 @@ if (numeroCleaned == montoNormalizado) {
 async function pagarnivel2ic3(req, res) {
     let { id_cuota, cuil_cuit, pago, cbu, fecha } = req.body;
     const filename = req.file.filename;
- 
+ console.log(id_cuota, cuil_cuit, pago, cbu, fecha)
 
 
     cuil_cuit_administrador = cuil_cuit/// del administrador
