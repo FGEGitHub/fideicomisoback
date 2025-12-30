@@ -1794,7 +1794,7 @@ async function pagarnivel2ic3(req, res) {
         monto_distinto,
         monto_inusual,
         id_cbu: cbupago,
-fecha,
+
         ubicacion: filename,///////////aca ver el problema
 
     };
