@@ -1506,7 +1506,7 @@ async function pagonivel2(req, res) {
 
 
                 descripcion = (dataExcel[property]['DESCRIPCION']).match(regex)
-                fecha = dataExcel[property]['']
+               // fecha = dataExcel[property]['']
                 referencia = dataExcel[property]['REFERENCIA']
                 debitos = dataExcel[property]['DEBITO EN $']
                 creditos = String(dataExcel[property]['CREDITO EN $'])
@@ -1618,7 +1618,6 @@ if (numeroCleaned == montoNormalizado) {
         monto_inusual,
         id_cbu: cbupago,
         ubicacion: filename,///////////aca ver el problema
-
     };
 
     const result = await pool.query('INSERT INTO pagos SET ?', [newLink]);
@@ -1673,7 +1672,7 @@ if (numeroCleaned == montoNormalizado) {
 async function pagarnivel2ic3(req, res) {
     let { id_cuota, cuil_cuit, pago, cbu, fecha } = req.body;
     const filename = req.file.filename;
-    console.log(id_cuota, cuil_cuit, pago, cbu, fecha, filename)
+ 
 
 
     cuil_cuit_administrador = cuil_cuit/// del administrador
@@ -1736,7 +1735,7 @@ async function pagarnivel2ic3(req, res) {
 
 
                 descripcion = (dataExcel[property]['DESCRIPCION']).match(regex)
-                fecha = dataExcel[property]['']
+            
                 referencia = dataExcel[property]['REFERENCIA']
                 debitos = dataExcel[property]['DEBITO EN $']
                 creditos = dataExcel[property]['CREDITO EN $']
@@ -1794,7 +1793,7 @@ async function pagarnivel2ic3(req, res) {
         monto_distinto,
         monto_inusual,
         id_cbu: cbupago,
-
+fecha,
         ubicacion: filename,///////////aca ver el problema
 
     };
