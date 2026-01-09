@@ -370,20 +370,24 @@ router.get('/listaic3', async (req, res) => {
       ORDER BY ci.anio DESC, ci.mes DESC
     `);
 
-    const clientesConRiesgo = await Promise.all(
-      clientes.map(async (cliente) => {
-        const riesgo = await traerriesgo.matriz(cliente); // ← número
+const clientesConRiesgo = await Promise.all(
+  clientes.map(async (cliente) => {
+    const riesgo = await traerriesgo.matriz(cliente); // número
 
-        return {
-          ...cliente,
-          riesgo,
-          ultimaCuota: cliente.anio
-            ? `${String(cliente.mes).padStart(2, '0')}/${cliente.anio}`
-            : null
-        };
-      })
-    );
-    res.json(clientesConRiesgo);
+    return {
+      ...cliente,
+      riesgo,
+      ultimaCuota: cliente.anio
+        ? `${String(cliente.mes).padStart(2, '0')}/${cliente.anio}`
+        : null
+    };
+  })
+);
+
+// 👉 ordenar por riesgo (mayor primero)
+clientesConRiesgo.sort((a, b) => b.riesgo - a.riesgo);
+
+res.json(clientesConRiesgo);
 
   } catch (error) {
     console.error("Error al obtener clientes y cuotas:", error);
