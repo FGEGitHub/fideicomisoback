@@ -773,9 +773,6 @@ const borrarCbu = async (req, res) => {
     }
 };
  */
-
-
-
 const deudores = async (req, res) => {
   try {
 
@@ -856,11 +853,71 @@ const deudores = async (req, res) => {
     res.status(500).json({ error: "Error al obtener deudores" });
   }
 };
-
 const cantidadInfo = async (req, res) => {
     try {
 
+ /*        const clientes = await pool.query(`
+            SELECT 
+                c.*,
 
+                CASE 
+                    WHEN (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ) IS NOT NULL 
+                    THEN 1 
+                    ELSE 0 
+                END AS tiene_cuota,
+
+                FLOOR(
+                    (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ) / 100
+                ) AS ultima_cuota_anio,
+
+                MOD(
+                    (
+                        CASE 
+                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                            ELSE uc.ultima_cuota_num
+                        END
+                    ),
+                    100
+                ) AS ultima_cuota_mes
+
+            FROM clientes c
+
+            LEFT JOIN (
+                SELECT 
+                    q.cuil_cuit,
+                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                FROM cuotas q
+                GROUP BY q.cuil_cuit
+            ) uc ON uc.cuil_cuit = c.cuil_cuit
+
+            LEFT JOIN (
+                SELECT 
+                    q.id_cliente,
+                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                FROM cuotas_ic3 q
+                GROUP BY q.id_cliente
+            ) uc_ic3 ON uc_ic3.id_cliente = c.id
+
+            WHERE c.zona IS NULL or c.zona = 'corrientes'
+            ORDER BY 
+                tiene_cuota DESC,
+                (
+                    CASE 
+                        WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                        ELSE uc.ultima_cuota_num
+                    END
+                ) DESC
+        `); */
 const clientes = await pool.query(`
     SELECT 
         c.*,
@@ -868,7 +925,7 @@ const clientes = await pool.query(`
         CASE 
             WHEN (
                 CASE 
-                   < WHEN c.zona = 'IC3' >THEN uc_ic3.ultima_cuota_num
+                    WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
                     ELSE uc.ultima_cuota_num
                 END
             ) IS NOT NULL 
