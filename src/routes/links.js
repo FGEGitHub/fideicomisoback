@@ -7,7 +7,7 @@ const fs = require('fs')
 const multer = require('multer')
 const path = require('path')
 const enviodemail = require('./Emails/Enviodemail')
-const { determinarEmpresa, habilitar, estadisticasLegajos, deshabilitar, borrarCbu, cbusPendientes, legajosCuil, ventalotee, add2,add3, modificarCuil, AgregarIngreso, detalleCuil, cantidadInfo, lista2, ventaLoteleg } = require('../controladores/linksControlador')
+const { determinarEmpresa, habilitar, estadisticasLegajos, deshabilitar, borrarCbu, cbusPendientes, legajosCuil, ventalotee, add2,add3, modificarCuil, AgregarIngreso, detalleCuil, cantidadInfo, lista2, ventaLoteleg, deudores } = require('../controladores/linksControlador')
 //const { busquedarenapet } = require('./funciones/buscarrenapet');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
@@ -59,6 +59,9 @@ router.get('/borrarcbu/:id',isLoggedInn,  borrarCbu)
 ///// Funcion devuelve cantidad de clientes /// agregar 
 
 router.get('/infocantidad',cantidadInfo )
+
+
+router.get('/deudores',deudores )
 
 router.get('/completarobservaciones',async (req, res) => {
     try {

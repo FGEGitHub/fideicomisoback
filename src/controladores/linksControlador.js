@@ -773,71 +773,94 @@ const borrarCbu = async (req, res) => {
     }
 };
  */
+
+
+
+const deudores = async (req, res) => {
+  try {
+
+    // ====== 1) DETALLE POR CLIENTE ======
+    const detalle = await pool.query(`
+        SELECT 
+            c.id,
+            c.nombre,
+           
+            c.cuil_cuit,
+
+            SUM(CASE WHEN q.diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+            SUM(CASE WHEN q.diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+            COUNT(q.id) AS total
+
+        FROM clientes c
+        LEFT JOIN cuotas q 
+            ON c.cuil_cuit = q.cuil_cuit
+            AND q.parcialidad = 'Final'
+
+        WHERE c.zona = 'PIT'
+
+        GROUP BY c.id, c.nombre,  c.cuil_cuit
+        ORDER BY debe DESC
+    `);
+
+    const clientes = detalle.map(c => {
+      const total = Number(c.total);
+      const debe = Number(c.debe);
+      const pagadas = Number(c.pagadas);
+
+      return {
+        id: c.id,
+        nombre: c.nombre,
+        apellido: c.apellido,
+        cuil_cuit: c.cuil_cuit,
+        debe,
+        pagadas,
+        total,
+        porcentajeDebe: total > 0 ? Number(((debe / total) * 100).toFixed(2)) : 0,
+        porcentajePagadas: total > 0 ? Number(((pagadas / total) * 100).toFixed(2)) : 0
+      };
+    });
+
+
+    // ====== 2) RESUMEN GENERAL ======
+    const resumenQuery = await pool.query(`
+        SELECT 
+            SUM(CASE WHEN q.diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+            SUM(CASE WHEN q.diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+            COUNT(*) AS total
+        FROM clientes c
+        INNER JOIN cuotas q 
+            ON c.cuil_cuit = q.cuil_cuit
+        WHERE c.zona = 'PIT'
+          AND q.parcialidad = 'Final'
+    `);
+
+    const r = resumenQuery[0];
+    const total = Number(r.total);
+    const debe = Number(r.debe);
+    const pagadas = Number(r.pagadas);
+
+    const resumen = {
+      debe,
+      pagadas,
+      total,
+      porcentajeDebe: total > 0 ? Number(((debe / total) * 100).toFixed(2)) : 0,
+      porcentajePagadas: total > 0 ? Number(((pagadas / total) * 100).toFixed(2)) : 0
+    };
+
+
+    // ====== RESPUESTA FINAL ======
+    res.json([ clientes, resumen ]);
+
+  } catch (error) {
+    console.error("Error en API deudores:", error);
+    res.status(500).json({ error: "Error al obtener deudores" });
+  }
+};
+
 const cantidadInfo = async (req, res) => {
     try {
 
- /*        const clientes = await pool.query(`
-            SELECT 
-                c.*,
 
-                CASE 
-                    WHEN (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ) IS NOT NULL 
-                    THEN 1 
-                    ELSE 0 
-                END AS tiene_cuota,
-
-                FLOOR(
-                    (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ) / 100
-                ) AS ultima_cuota_anio,
-
-                MOD(
-                    (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ),
-                    100
-                ) AS ultima_cuota_mes
-
-            FROM clientes c
-
-            LEFT JOIN (
-                SELECT 
-                    q.cuil_cuit,
-                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
-                FROM cuotas q
-                GROUP BY q.cuil_cuit
-            ) uc ON uc.cuil_cuit = c.cuil_cuit
-
-            LEFT JOIN (
-                SELECT 
-                    q.id_cliente,
-                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
-                FROM cuotas_ic3 q
-                GROUP BY q.id_cliente
-            ) uc_ic3 ON uc_ic3.id_cliente = c.id
-
-            WHERE c.zona IS NULL or c.zona = 'corrientes'
-            ORDER BY 
-                tiene_cuota DESC,
-                (
-                    CASE 
-                        WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                        ELSE uc.ultima_cuota_num
-                    END
-                ) DESC
-        `); */
 const clientes = await pool.query(`
     SELECT 
         c.*,
@@ -845,7 +868,7 @@ const clientes = await pool.query(`
         CASE 
             WHEN (
                 CASE 
-                    WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                   < WHEN c.zona = 'IC3' >THEN uc_ic3.ultima_cuota_num
                     ELSE uc.ultima_cuota_num
                 END
             ) IS NOT NULL 
@@ -1339,7 +1362,8 @@ module.exports = {
     add2,
     modificarCuil,
     AgregarIngreso,
-    detalleCuil
+    detalleCuil,
+    deudores
 
 }
 
