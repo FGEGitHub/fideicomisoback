@@ -9,7 +9,7 @@ const path = require('path')
 const sacarguion = require('../public/apps/transformarcuit')
 const nodemailer = require("nodemailer");
 const enviodemail = require('../routes/Emails/Enviodemail')
-const traerriesgo =  require('../routes/funciones/riesgo')
+const traerriesgo = require('../routes/funciones/riesgo')
 const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -26,140 +26,140 @@ function calcularEdad(fechaNacimiento) {
 }
 // Función para buscar en la página
 const buscarEnPagina = async (nombreCompleto) => {
-  try {
-    const url = 'https://repet.jus.gob.ar/';
-    
-    // ⚠️ Esta parte ignora problemas de SSL (solo para pruebas o sitios no confiables)
-    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+    try {
+        const url = 'https://repet.jus.gob.ar/';
 
-    const response = await axios.get(url, { httpsAgent });
-    const html = response.data;
-    const $ = cheerio.load(html);
+        // ⚠️ Esta parte ignora problemas de SSL (solo para pruebas o sitios no confiables)
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-    const pageText = $('body').text();
-    const lines = pageText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        const response = await axios.get(url, { httpsAgent });
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-    const palabras = nombreCompleto
-      .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quita tildes
-      .split(/[\s\-’‘'"]+/)
-      .filter(word => word.length > 0);
+        const pageText = $('body').text();
+        const lines = pageText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-    const totalPalabras = palabras.length;
-    const palabrasNecesarias = totalPalabras > 3 ? totalPalabras - 1 : totalPalabras;
+        const palabras = nombreCompleto
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quita tildes
+            .split(/[\s\-’‘'"]+/)
+            .filter(word => word.length > 0);
 
-    let coincidencias = [];
+        const totalPalabras = palabras.length;
+        const palabrasNecesarias = totalPalabras > 3 ? totalPalabras - 1 : totalPalabras;
 
-    for (const line of lines) {
-      const lineaNormalizada = line.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        let coincidencias = [];
 
-      const palabrasExactas = palabras.filter(palabra =>
-        lineaNormalizada.includes(palabra)
-      );
+        for (const line of lines) {
+            const lineaNormalizada = line.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-      const palabrasSospechosas = palabras.filter(palabra =>
-        !palabrasExactas.includes(palabra) &&
-        lineaNormalizada.split(' ').some(palabraLinea => diferenciaLetras(palabra, palabraLinea) <= 1)
-      );
+            const palabrasExactas = palabras.filter(palabra =>
+                lineaNormalizada.includes(palabra)
+            );
 
-      if (palabrasExactas.length + palabrasSospechosas.length >= palabrasNecesarias) {
-        coincidencias.push({ linea: line, palabrasExactas, palabrasSospechosas });
-      }
+            const palabrasSospechosas = palabras.filter(palabra =>
+                !palabrasExactas.includes(palabra) &&
+                lineaNormalizada.split(' ').some(palabraLinea => diferenciaLetras(palabra, palabraLinea) <= 1)
+            );
+
+            if (palabrasExactas.length + palabrasSospechosas.length >= palabrasNecesarias) {
+                coincidencias.push({ linea: line, palabrasExactas, palabrasSospechosas });
+            }
+        }
+
+        return coincidencias.length > 0 ? coincidencias : null;
+
+    } catch (error) {
+        console.error('Error al buscar en la página:', error.message);
+        return null;
     }
-
-    return coincidencias.length > 0 ? coincidencias : null;
-
-  } catch (error) {
-    console.error('Error al buscar en la página:', error.message);
-    return null;
-  }
 };
-  
-  // Función para calcular la diferencia de letras entre dos palabras
-  const diferenciaLetras = (str1, str2) => {
+
+// Función para calcular la diferencia de letras entre dos palabras
+const diferenciaLetras = (str1, str2) => {
     if (Math.abs(str1.length - str2.length) > 1) {
-      return Infinity; // Si las longitudes difieren en más de una letra, no son similares
+        return Infinity; // Si las longitudes difieren en más de una letra, no son similares
     }
-  
+
     let diferencias = 0;
     let i = 0, j = 0;
-  
+
     while (i < str1.length && j < str2.length) {
-      if (str1[i] !== str2[j]) {
-        diferencias++;
-        if (diferencias > 1) return diferencias;
-  
-        if (str1.length > str2.length) i++; // Salto en str1
-        else if (str1.length < str2.length) j++; // Salto en str2
-        else {
-          i++;
-          j++;
+        if (str1[i] !== str2[j]) {
+            diferencias++;
+            if (diferencias > 1) return diferencias;
+
+            if (str1.length > str2.length) i++; // Salto en str1
+            else if (str1.length < str2.length) j++; // Salto en str2
+            else {
+                i++;
+                j++;
+            }
+        } else {
+            i++;
+            j++;
         }
-      } else {
-        i++;
-        j++;
-      }
     }
-  
+
     // Contar diferencias restantes si una palabra es más larga
     diferencias += Math.abs((str1.length - i) - (str2.length - j));
-  
+
     return diferencias;
-  };
-  
-  
-  // Función para calcular la similitud de Levenshtein
-  const similarity = (str1, str2) => {
+};
+
+
+// Función para calcular la similitud de Levenshtein
+const similarity = (str1, str2) => {
     const distance = levenshteinDistance(str1, str2);
     const maxLength = Math.max(str1.length, str2.length);
     return (maxLength - distance) / maxLength;
-  };
-  
-  // Función de distancia de Levenshtein
-  const levenshteinDistance = (a, b) => {
+};
+
+// Función de distancia de Levenshtein
+const levenshteinDistance = (a, b) => {
     const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
-  
+
     for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
     for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
-  
+
     for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1, // Inserción
-          matrix[i][j - 1] + 1, // Eliminación
-          matrix[i - 1][j - 1] + cost // Sustitución
-        );
-      }
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1, // Inserción
+                matrix[i][j - 1] + 1, // Eliminación
+                matrix[i - 1][j - 1] + cost // Sustitución
+            );
+        }
     }
-  
+
     return matrix[a.length][b.length];
-  };
+};
 
 // Configurar transporte de correo
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'sistemasfideicomiso@gmail.com',
-    pass: 'mfqh gznx yezv wszc'
-  }
+    service: 'gmail',
+    auth: {
+        user: 'sistemasfideicomiso@gmail.com',
+        pass: 'mfqh gznx yezv wszc'
+    }
 });
 
 // Función para enviar correo
 const enviarCorreo = async (asunto, mensaje) => {
-  const mailOptions = {
-    from: 'sistemasfideicomiso@gmail.com',
-    to: ['fernandog.enrique.dev@gmail.com', 'jantusaf@gmail.com'],
-    subject: asunto,
-    text: mensaje
-  };
+    const mailOptions = {
+        from: 'sistemasfideicomiso@gmail.com',
+        to: ['fernandog.enrique.dev@gmail.com', 'jantusaf@gmail.com'],
+        subject: asunto,
+        text: mensaje
+    };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log('Correo enviado correctamente');
-  } catch (error) {
-    console.error('Error al enviar el correo:', error);
-  }
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log('Correo enviado correctamente');
+    } catch (error) {
+        console.error('Error al enviar el correo:', error);
+    }
 };
 
 
@@ -243,16 +243,16 @@ const estadisticasLegajos = async (req, res) => {
     aux = "Dj Datos personales, "
     j = "Documentacion PEP, "
     k = "Dj Origen de Fondos, "
- t = "Constancia RePET, "
+    t = "Constancia RePET, "
     m = "Referencias comerciales, "
     n = 0
     o = "Recibo de sueldo, "
     p = "Pago Monotributo, "
     q = "Pago autonomo, "
     r = "Constancia RePET, "
-s="Recibo de sueldo"
-u="Constancia CUIL/CUIT"
-v="Acreditacion de ingresos"
+    s = "Recibo de sueldo"
+    u = "Constancia CUIL/CUIT"
+    v = "Acreditacion de ingresos"
 
     aa = 0
     aa2 = 0
@@ -269,9 +269,9 @@ v="Acreditacion de ingresos"
     ll = 0
     mm = 0
     nn = 0
-    ss= 0
+    ss = 0
     tt = 0   ////Constancia RePET
-    uu=0
+    uu = 0
     ////   porccompleto = (aa + aa2 + bb + cc + dd + ee + auxaux + jj + kk)
     ////////sumatoria de acreditacion de empresas
     ggg = 0  ///dj iva
@@ -280,13 +280,13 @@ v="Acreditacion de ingresos"
     hhh = 0 /// "Pagos Previsionales "
     mmm = 0// "Referencias comerciales"
     lll = 0 //// constancia rpet 
-    sss= s
+    sss = s
     ////  sumatoria de acreditacion ingresos de personas
     ooo = 0 /// "Recibo de sueldo"
     ppp = 0 ///  "Pago Monotributo"
     qqq = 0 ///  "Pago autonomo"
-    ttt= 0 /// Constancia RePET
-    vvv=0 ///acreditacion de ingresos
+    ttt = 0 /// Constancia RePET
+    vvv = 0 ///acreditacion de ingresos
 
 
 
@@ -322,11 +322,11 @@ v="Acreditacion de ingresos"
                     ee = 1
                     break;
 
-                    case "Constancia RePET":
-                        t = ""
-                         tt = 1
-                        
-                         break;
+                case "Constancia RePET":
+                    t = ""
+                    tt = 1
+
+                    break;
 
                 case "Dj Datospers":
                     aux = ""
@@ -336,12 +336,12 @@ v="Acreditacion de ingresos"
                     j = ""
                     jj = 1
                     break;
-                    case "Documentacion PEP":
-                        console.log("Documentacion PEP")
-                        j = ""
-                        jj = 1
-                        break;
-                    
+                case "Documentacion PEP":
+                    console.log("Documentacion PEP")
+                    j = ""
+                    jj = 1
+                    break;
+
                 case "Dj OrigenFondos":
 
                     k = ""
@@ -401,15 +401,15 @@ v="Acreditacion de ingresos"
                     a = ""
                     aa = 1
                     break;
-                    case "Dni dorso":
+                case "Dni dorso":
                     a2 = ""
                     aa2 = 1
                     break;
-                    
-                    case "Constancia CUIL/CUIT":
-                        u = ""
-                       uu = 1
-                        break;
+
+                case "Constancia CUIL/CUIT":
+                    u = ""
+                    uu = 1
+                    break;
                 case "Constancia de Afip":
                     b = ""
                     bb = 1
@@ -428,18 +428,18 @@ v="Acreditacion de ingresos"
                     j = ""
                     jj = 1
                     break;
-                    case "Documentacion PEP":
-                        j = ""
-                        jj = 1
-                        break;
+                case "Documentacion PEP":
+                    j = ""
+                    jj = 1
+                    break;
                 case "Dj OrigenFondos":
                     k = ""
                     kk = 1
                     break;
                 case "Constancia RePET":
-                   t = ""
+                    t = ""
                     tt = 1
-                   
+
                     break;
 
                 case "DDJJ IIBB":
@@ -454,13 +454,13 @@ v="Acreditacion de ingresos"
                     ll = 1
                     ooo += 1
                     break;
-                    
-                    case "Acreditacion de ingresos":
-                        acreditacion_i = "Cliente tiene como acreditacion de ingresos "
-                        l = ""
-                        ll = 1
-                      vvv += 1
-                        break;
+
+                case "Acreditacion de ingresos":
+                    acreditacion_i = "Cliente tiene como acreditacion de ingresos "
+                    l = ""
+                    ll = 1
+                    vvv += 1
+                    break;
                 case "Pago Monotributo":
                     acreditacion_i = "Cliente tiene como acreditacion de ingresos "
                     l = ""
@@ -484,12 +484,12 @@ v="Acreditacion de ingresos"
     }
 
     if (razonn == 'Empresa') {
-       
-        Faltan = 'Aun falta completar ' + a + a2 + b + c + d + e + aux + j + k  +t
+
+        Faltan = 'Aun falta completar ' + a + a2 + b + c + d + e + aux + j + k + t
         porccompleto = (aa + aa2 + bb + cc + dd + ee + auxaux + jj + kk + tt)
 
         porccompleto = porccompleto / 10
-    
+
 
         porccompleto = (porccompleto * 100).toFixed(2)
         ///
@@ -522,12 +522,12 @@ v="Acreditacion de ingresos"
 
 
     } else {
-       
-        Faltan = 'Aun falta completar ' + a + a2 +u + b + e + aux + j + k  + s + t 
-       
-        porccompleto = (aa + aa2+uu + bb + ee + auxaux + jj + kk + ll+ tt)
-///a dni  b constancia afil  c estaturo d acta organi   e domicilio auxDj calidad opersia j  Datospers
-// k origen de fondo t repet    ll Pago Monotributo
+
+        Faltan = 'Aun falta completar ' + a + a2 + u + b + e + aux + j + k + s + t
+
+        porccompleto = (aa + aa2 + uu + bb + ee + auxaux + jj + kk + ll + tt)
+        ///a dni  b constancia afil  c estaturo d acta organi   e domicilio auxDj calidad opersia j  Datospers
+        // k origen de fondo t repet    ll Pago Monotributo
         porccompleto = porccompleto / 10
 
         porccompleto = (porccompleto * 100).toFixed(2)
@@ -537,7 +537,7 @@ v="Acreditacion de ingresos"
         ///// ppp = 0 ///  "Pago Monotributo"
         //////  qqq = 0 ///  "Pago autonomo"
         if (acreditacion_i != "No tiene constancias de acreditacion de ingresos") {
-            
+
             if (vvv != 0) {
                 acreditacion_i = acreditacion_i + " " + vvv + " Acreditacion de ingresos"
             }
@@ -554,10 +554,10 @@ v="Acreditacion de ingresos"
             if (rrr != 0) {
                 acreditacion_i = acreditacion_i + " " + rrr + " IIBB"
             }
-            if ( sss != 0) {
+            if (sss != 0) {
                 acreditacion_i = acreditacion_i + " " + rrr + " Recibo(s) de sueldo"
             }
-           
+
 
 
         }
@@ -774,10 +774,10 @@ const borrarCbu = async (req, res) => {
 };
  */
 const deudores = async (req, res) => {
-  try {
+    try {
 
-    // ====== 1) DETALLE POR CLIENTE ======
-   const detalle = await pool.query(`
+        // ====== 1) DETALLE POR CLIENTE ======
+        const detalle = await pool.query(`
   SELECT 
     c.id,
     c.nombre,
@@ -792,10 +792,13 @@ const deudores = async (req, res) => {
     COALESCE(t.liquidadas,0) AS liquidadas,
 
     COALESCE(p.total_devengado,0) AS total_devengado,
-    COALESCE(p.pagado,0) AS pagado
+    COALESCE(p.pagado,0) AS pagado,
+
+    COALESCE(q.cuotasquedebe,'') AS cuotasquedebe
 
   FROM clientes c
 
+  -- ===== Cuotas Final (debe/pagadas/total) =====
   LEFT JOIN (
     SELECT 
       cuil_cuit,
@@ -806,8 +809,10 @@ const deudores = async (req, res) => {
     FROM cuotas
     WHERE parcialidad = 'Final'
     GROUP BY cuil_cuit, id_lote
-  ) f ON c.cuil_cuit = f.cuil_cuit
+  ) f 
+    ON c.cuil_cuit = f.cuil_cuit
 
+  -- ===== Todas las cuotas =====
   LEFT JOIN (
     SELECT
       cuil_cuit,
@@ -821,6 +826,7 @@ const deudores = async (req, res) => {
     ON c.cuil_cuit = t.cuil_cuit 
    AND f.id_lote = t.id_lote
 
+  -- ===== Devengado y Pagado =====
   LEFT JOIN (
     SELECT 
       cuotas.cuil_cuit,
@@ -836,46 +842,68 @@ const deudores = async (req, res) => {
     ON c.cuil_cuit = p.cuil_cuit
    AND f.id_lote = p.id_lote
 
+  -- ===== Cuotas que debe (array mes/año) =====
+  LEFT JOIN (
+    SELECT
+      cuil_cuit,
+      id_lote,
+      GROUP_CONCAT(
+        CONCAT(LPAD(mes,2,'0'),'/',anio)
+        ORDER BY anio, mes
+        SEPARATOR ','
+      ) AS cuotasquedebe
+    FROM cuotas
+    WHERE parcialidad = 'Final'
+      AND diferencia < -1
+    GROUP BY cuil_cuit, id_lote
+  ) q
+    ON c.cuil_cuit = q.cuil_cuit
+   AND f.id_lote = q.id_lote
+
   WHERE c.zona = 'PIT'
   ORDER BY f.debe DESC
 `);
 
-    const clientes = detalle.map(c => {
-      const total = Number(c.total);
-      const debe = Number(c.debe);
-      const pagadas = Number(c.pagadas);
-      const total_cuotas = Number(c.total_cuotas);
-      const liquidadas = Number(c.liquidadas);
+        const clientes = detalle.map(c => {
+            const total = Number(c.total);
+            const debe = Number(c.debe);
+            const pagadas = Number(c.pagadas);
+            const total_cuotas = Number(c.total_cuotas);
+            const liquidadas = Number(c.liquidadas);
 
-      return {
-        id: c.id,
-        nombre: c.nombre,
-        cuil_cuit: c.cuil_cuit,
-total_devengado: Number(c.total_devengado),
-pagado: Number(c.pagado),
-        debe,
-        pagadas,
-        total,
+            return {
+                id: c.id,
+                nombre: c.nombre,
+                cuil_cuit: c.cuil_cuit,
+                total_devengado: Number(c.total_devengado),
+                pagado: Number(c.pagado),
+                debe,
+                pagadas,
+                total,
 
-        total_cuotas,
-        liquidadas,
+                total_cuotas,
+                liquidadas,
 
-        porcentajeDebe: total > 0 
-          ? Number(((debe / total) * 100).toFixed(2)) 
-          : 0,
+                porcentajeDebe: total > 0
+                    ? Number(((debe / total) * 100).toFixed(2))
+                    : 0,
 
-        porcentajePagadas: total > 0 
-          ? Number(((pagadas / total) * 100).toFixed(2)) 
-          : 0,
+                porcentajePagadas: total > 0
+                    ? Number(((pagadas / total) * 100).toFixed(2))
+                    : 0,
 
-        porcentajeAvance: total_cuotas > 0
-          ? Number(((liquidadas / total_cuotas) * 100).toFixed(1))
-          : 0
-      };
-    });
+                porcentajeAvance: total_cuotas > 0
+                    ? Number(((liquidadas / total_cuotas) * 100).toFixed(1))
+                    : 0,
+                cuotasquedebe: c.cuotasquedebe
+                    ? c.cuotasquedebe.split(',')
+                    : [],
 
-    // ====== 2) RESUMEN GENERAL ======
-    const resumenQuery = await pool.query(`
+            };
+        });
+
+        // ====== 2) RESUMEN GENERAL ======
+        const resumenQuery = await pool.query(`
       SELECT 
         COALESCE(SUM(f.debe),0) AS debe,
         COALESCE(SUM(f.pagadas),0) AS pagadas,
@@ -908,104 +936,104 @@ pagado: Number(c.pagado),
       WHERE c.zona = 'PIT'
     `);
 
-    const r = resumenQuery[0];
+        const r = resumenQuery[0];
 
-    const resumen = {
-      debe: Number(r.debe),
-      pagadas: Number(r.pagadas),
-      total: Number(r.total_final),
-      total_cuotas: Number(r.total_cuotas),
-      liquidadas: Number(r.liquidadas),
+        const resumen = {
+            debe: Number(r.debe),
+            pagadas: Number(r.pagadas),
+            total: Number(r.total_final),
+            total_cuotas: Number(r.total_cuotas),
+            liquidadas: Number(r.liquidadas),
 
-      porcentajeDebe: r.total_final > 0
-        ? Number(((r.debe / r.total_final) * 100).toFixed(2))
-        : 0,
+            porcentajeDebe: r.total_final > 0
+                ? Number(((r.debe / r.total_final) * 100).toFixed(2))
+                : 0,
 
-      porcentajePagadas: r.total_final > 0
-        ? Number(((r.pagadas / r.total_final) * 100).toFixed(2))
-        : 0,
+            porcentajePagadas: r.total_final > 0
+                ? Number(((r.pagadas / r.total_final) * 100).toFixed(2))
+                : 0,
 
-      porcentajeAvance: r.total_cuotas > 0
-        ? Number(((r.liquidadas / r.total_cuotas) * 100).toFixed(1))
-        : 0
-    };
+            porcentajeAvance: r.total_cuotas > 0
+                ? Number(((r.liquidadas / r.total_cuotas) * 100).toFixed(1))
+                : 0
+        };
 
-    // ====== RESPUESTA FINAL ======
-    res.json([ clientes, resumen ]);
+        // ====== RESPUESTA FINAL ======
+        res.json([clientes, resumen]);
 
-  } catch (error) {
-    console.error("Error en API deudores:", error);
-    res.status(500).json({ error: "Error al obtener deudores" });
-  }
+    } catch (error) {
+        console.error("Error en API deudores:", error);
+        res.status(500).json({ error: "Error al obtener deudores" });
+    }
 };
 
 
 const cantidadInfo = async (req, res) => {
     try {
 
- /*        const clientes = await pool.query(`
-            SELECT 
-                c.*,
-
-                CASE 
-                    WHEN (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ) IS NOT NULL 
-                    THEN 1 
-                    ELSE 0 
-                END AS tiene_cuota,
-
-                FLOOR(
-                    (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ) / 100
-                ) AS ultima_cuota_anio,
-
-                MOD(
-                    (
-                        CASE 
-                            WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                            ELSE uc.ultima_cuota_num
-                        END
-                    ),
-                    100
-                ) AS ultima_cuota_mes
-
-            FROM clientes c
-
-            LEFT JOIN (
-                SELECT 
-                    q.cuil_cuit,
-                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
-                FROM cuotas q
-                GROUP BY q.cuil_cuit
-            ) uc ON uc.cuil_cuit = c.cuil_cuit
-
-            LEFT JOIN (
-                SELECT 
-                    q.id_cliente,
-                    MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
-                FROM cuotas_ic3 q
-                GROUP BY q.id_cliente
-            ) uc_ic3 ON uc_ic3.id_cliente = c.id
-
-            WHERE c.zona IS NULL or c.zona = 'corrientes'
-            ORDER BY 
-                tiene_cuota DESC,
-                (
-                    CASE 
-                        WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
-                        ELSE uc.ultima_cuota_num
-                    END
-                ) DESC
-        `); */
-const clientes = await pool.query(`
+        /*        const clientes = await pool.query(`
+                   SELECT 
+                       c.*,
+       
+                       CASE 
+                           WHEN (
+                               CASE 
+                                   WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                                   ELSE uc.ultima_cuota_num
+                               END
+                           ) IS NOT NULL 
+                           THEN 1 
+                           ELSE 0 
+                       END AS tiene_cuota,
+       
+                       FLOOR(
+                           (
+                               CASE 
+                                   WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                                   ELSE uc.ultima_cuota_num
+                               END
+                           ) / 100
+                       ) AS ultima_cuota_anio,
+       
+                       MOD(
+                           (
+                               CASE 
+                                   WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                                   ELSE uc.ultima_cuota_num
+                               END
+                           ),
+                           100
+                       ) AS ultima_cuota_mes
+       
+                   FROM clientes c
+       
+                   LEFT JOIN (
+                       SELECT 
+                           q.cuil_cuit,
+                           MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                       FROM cuotas q
+                       GROUP BY q.cuil_cuit
+                   ) uc ON uc.cuil_cuit = c.cuil_cuit
+       
+                   LEFT JOIN (
+                       SELECT 
+                           q.id_cliente,
+                           MAX(q.anio * 100 + q.mes) AS ultima_cuota_num
+                       FROM cuotas_ic3 q
+                       GROUP BY q.id_cliente
+                   ) uc_ic3 ON uc_ic3.id_cliente = c.id
+       
+                   WHERE c.zona IS NULL or c.zona = 'corrientes'
+                   ORDER BY 
+                       tiene_cuota DESC,
+                       (
+                           CASE 
+                               WHEN c.zona = 'IC3' THEN uc_ic3.ultima_cuota_num
+                               ELSE uc.ultima_cuota_num
+                           END
+                       ) DESC
+               `); */
+        const clientes = await pool.query(`
     SELECT 
         c.*,
 
@@ -1083,7 +1111,7 @@ const clientes = await pool.query(`
         );
 
         clientesConPorcentaje.sort((a, b) => b.porcentaje - a.porcentaje);
-console.log(clientesConPorcentaje.length)
+        console.log(clientesConPorcentaje.length)
         res.json(clientesConPorcentaje);
 
     } catch (error) {
@@ -1188,8 +1216,8 @@ const legajosCuil = async (req, res) => {
   
       })
       const imagedir = fs.readdirSync(path.join(__dirname, '../dbimages/'))*/
-      console.log(result)
-      console.log('result')
+    console.log(result)
+    console.log('result')
     res.json([result, cl])
 
 
@@ -1258,43 +1286,43 @@ const ventalotee = async (req, res) => {
 }
 ///agregar cliente
 const add2 = async (req, res) => {
-    const { Nombre,  domicilio, cuil_cuit, razon, telefono, observaciones } = req.body;
-    const newLink = { Nombre,  razon, telefono, domicilio, observaciones, cuil_cuit };
-  
+    const { Nombre, domicilio, cuil_cuit, razon, telefono, observaciones } = req.body;
+    const newLink = { Nombre, razon, telefono, domicilio, observaciones, cuil_cuit };
+
     try {
-      // Verificar si el cliente ya existe
-      const row = await pool.query('SELECT * FROM clientes WHERE cuil_cuit = ?', [cuil_cuit]);
-      if (row.length > 0) {
-        res.send('Error: el cuil_cuit ya existe.');
-        return;
-      }
-  
-      // Buscar en la página
-      const resultadosBusqueda = await buscarEnPagina(Nombre);
-      // Enviar correo según los resultados
-      if (resultadosBusqueda) {
-        const mensaje = `Se encontraron coincidencias para el cliente ${Nombre}:\n\n` +
-          resultadosBusqueda.map(result => 
-            `- Línea: ${result.linea}\n  Palabras exactas: ${result.palabrasExactas.join(', ')}\n  Palabras sospechosas: ${result.palabrasSospechosas.join(', ')}`
-          ).join('\n\n');
-        await enviarCorreo('Resultados encontrados para cliente', mensaje);
-        await pool.query('INSERT INTO clientes SET ?', [newLink]);
-        res.json('Cliente guardado correctamente y analizado. Resultado:'+mensaje);
-      } else {
-        const mensaje = `No se encontraron coincidencias para el cliente ${Nombre}.`;
-        await enviarCorreo('Sin coincidencias para cliente', mensaje);
-        await pool.query('INSERT INTO clientes SET ?', [newLink]);
-        console.log(resultadosBusqueda)
-        res.json('Cliente guardado correctamente y analizado. No hubo coincidencias');
-      }
- 
-      // Insertar cliente en la base de datos
-     
+        // Verificar si el cliente ya existe
+        const row = await pool.query('SELECT * FROM clientes WHERE cuil_cuit = ?', [cuil_cuit]);
+        if (row.length > 0) {
+            res.send('Error: el cuil_cuit ya existe.');
+            return;
+        }
+
+        // Buscar en la página
+        const resultadosBusqueda = await buscarEnPagina(Nombre);
+        // Enviar correo según los resultados
+        if (resultadosBusqueda) {
+            const mensaje = `Se encontraron coincidencias para el cliente ${Nombre}:\n\n` +
+                resultadosBusqueda.map(result =>
+                    `- Línea: ${result.linea}\n  Palabras exactas: ${result.palabrasExactas.join(', ')}\n  Palabras sospechosas: ${result.palabrasSospechosas.join(', ')}`
+                ).join('\n\n');
+            await enviarCorreo('Resultados encontrados para cliente', mensaje);
+            await pool.query('INSERT INTO clientes SET ?', [newLink]);
+            res.json('Cliente guardado correctamente y analizado. Resultado:' + mensaje);
+        } else {
+            const mensaje = `No se encontraron coincidencias para el cliente ${Nombre}.`;
+            await enviarCorreo('Sin coincidencias para cliente', mensaje);
+            await pool.query('INSERT INTO clientes SET ?', [newLink]);
+            console.log(resultadosBusqueda)
+            res.json('Cliente guardado correctamente y analizado. No hubo coincidencias');
+        }
+
+        // Insertar cliente en la base de datos
+
     } catch (error) {
-      console.error('Error al procesar la solicitud:', error);
-      res.status(500).send('Error al procesar la solicitud.');
+        console.error('Error al procesar la solicitud:', error);
+        res.status(500).send('Error al procesar la solicitud.');
     }
-  };
+};
 
 
 
