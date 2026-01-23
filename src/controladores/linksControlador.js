@@ -778,72 +778,137 @@ const deudores = async (req, res) => {
 
     // ====== 1) DETALLE POR CLIENTE ======
     const detalle = await pool.query(`
+      SELECT 
+        c.id,
+        c.nombre,
+        c.cuil_cuit,
+
+        -- Datos de cuotas Final (análisis de deuda)
+        COALESCE(f.debe,0) AS debe,
+        COALESCE(f.pagadas,0) AS pagadas,
+        COALESCE(f.total_final,0) AS total,
+
+        -- Datos de todas las cuotas (Original + Final)
+        COALESCE(t.total_cuotas,0) AS total_cuotas,
+        COALESCE(t.liquidadas,0) AS liquidadas
+
+      FROM clientes c
+
+      -- Subconsulta de cuotas Final
+      LEFT JOIN (
         SELECT 
-            c.id,
-            c.nombre,
-           
-            c.cuil_cuit,
+          cuil_cuit,
+          SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+          COUNT(*) AS total_final
+        FROM cuotas
+        WHERE parcialidad = 'Final'
+        GROUP BY cuil_cuit
+      ) f ON c.cuil_cuit = f.cuil_cuit
 
-            SUM(CASE WHEN q.diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-            SUM(CASE WHEN q.diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
-            COUNT(q.id) AS total
+      -- Subconsulta de todas las cuotas
+      LEFT JOIN (
+        SELECT
+          cuil_cuit,
+          COUNT(*) AS total_cuotas,
+          SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
+        FROM cuotas
+        WHERE parcialidad IN ('Final','Original')
+        GROUP BY cuil_cuit
+      ) t ON c.cuil_cuit = t.cuil_cuit
 
-        FROM clientes c
-        LEFT JOIN cuotas q 
-            ON c.cuil_cuit = q.cuil_cuit
-            AND q.parcialidad = 'Final'
-
-        WHERE c.zona = 'PIT'
-
-        GROUP BY c.id, c.nombre,  c.cuil_cuit
-        ORDER BY debe DESC
+      WHERE c.zona = 'PIT'
+      ORDER BY f.debe DESC
     `);
 
     const clientes = detalle.map(c => {
       const total = Number(c.total);
       const debe = Number(c.debe);
       const pagadas = Number(c.pagadas);
+      const total_cuotas = Number(c.total_cuotas);
+      const liquidadas = Number(c.liquidadas);
 
       return {
         id: c.id,
         nombre: c.nombre,
-        apellido: c.apellido,
         cuil_cuit: c.cuil_cuit,
+
         debe,
         pagadas,
         total,
-        porcentajeDebe: total > 0 ? Number(((debe / total) * 100).toFixed(2)) : 0,
-        porcentajePagadas: total > 0 ? Number(((pagadas / total) * 100).toFixed(2)) : 0
+
+        total_cuotas,
+        liquidadas,
+
+        porcentajeDebe: total > 0 
+          ? Number(((debe / total) * 100).toFixed(2)) 
+          : 0,
+
+        porcentajePagadas: total > 0 
+          ? Number(((pagadas / total) * 100).toFixed(2)) 
+          : 0,
+
+        porcentajeAvance: total_cuotas > 0
+          ? Number(((liquidadas / total_cuotas) * 100).toFixed(1))
+          : 0
       };
     });
 
-
     // ====== 2) RESUMEN GENERAL ======
     const resumenQuery = await pool.query(`
+      SELECT 
+        COALESCE(SUM(f.debe),0) AS debe,
+        COALESCE(SUM(f.pagadas),0) AS pagadas,
+        COALESCE(SUM(f.total_final),0) AS total_final,
+        COALESCE(SUM(t.total_cuotas),0) AS total_cuotas,
+        COALESCE(SUM(t.liquidadas),0) AS liquidadas
+      FROM clientes c
+
+      LEFT JOIN (
         SELECT 
-            SUM(CASE WHEN q.diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-            SUM(CASE WHEN q.diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
-            COUNT(*) AS total
-        FROM clientes c
-        INNER JOIN cuotas q 
-            ON c.cuil_cuit = q.cuil_cuit
-        WHERE c.zona = 'PIT'
-          AND q.parcialidad = 'Final'
+          cuil_cuit,
+          SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+          COUNT(*) AS total_final
+        FROM cuotas
+        WHERE parcialidad = 'Final'
+        GROUP BY cuil_cuit
+      ) f ON c.cuil_cuit = f.cuil_cuit
+
+      LEFT JOIN (
+        SELECT
+          cuil_cuit,
+          COUNT(*) AS total_cuotas,
+          SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
+        FROM cuotas
+        WHERE parcialidad IN ('Final','Original')
+        GROUP BY cuil_cuit
+      ) t ON c.cuil_cuit = t.cuil_cuit
+
+      WHERE c.zona = 'PIT'
     `);
 
     const r = resumenQuery[0];
-    const total = Number(r.total);
-    const debe = Number(r.debe);
-    const pagadas = Number(r.pagadas);
 
     const resumen = {
-      debe,
-      pagadas,
-      total,
-      porcentajeDebe: total > 0 ? Number(((debe / total) * 100).toFixed(2)) : 0,
-      porcentajePagadas: total > 0 ? Number(((pagadas / total) * 100).toFixed(2)) : 0
-    };
+      debe: Number(r.debe),
+      pagadas: Number(r.pagadas),
+      total: Number(r.total_final),
+      total_cuotas: Number(r.total_cuotas),
+      liquidadas: Number(r.liquidadas),
 
+      porcentajeDebe: r.total_final > 0
+        ? Number(((r.debe / r.total_final) * 100).toFixed(2))
+        : 0,
+
+      porcentajePagadas: r.total_final > 0
+        ? Number(((r.pagadas / r.total_final) * 100).toFixed(2))
+        : 0,
+
+      porcentajeAvance: r.total_cuotas > 0
+        ? Number(((r.liquidadas / r.total_cuotas) * 100).toFixed(1))
+        : 0
+    };
 
     // ====== RESPUESTA FINAL ======
     res.json([ clientes, resumen ]);
@@ -853,6 +918,8 @@ const deudores = async (req, res) => {
     res.status(500).json({ error: "Error al obtener deudores" });
   }
 };
+
+
 const cantidadInfo = async (req, res) => {
     try {
 
