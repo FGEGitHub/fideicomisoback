@@ -777,49 +777,51 @@ const deudores = async (req, res) => {
   try {
 
     // ====== 1) DETALLE POR CLIENTE ======
-    const detalle = await pool.query(`
-      SELECT 
-        c.id,
-        c.nombre,
-        c.cuil_cuit,
+   const detalle = await pool.query(`
+  SELECT 
+    c.id,
+    c.nombre,
+    c.cuil_cuit,
+    f.id_lote,
 
-        -- Datos de cuotas Final (análisis de deuda)
-        COALESCE(f.debe,0) AS debe,
-        COALESCE(f.pagadas,0) AS pagadas,
-        COALESCE(f.total_final,0) AS total,
+    COALESCE(f.debe,0) AS debe,
+    COALESCE(f.pagadas,0) AS pagadas,
+    COALESCE(f.total_final,0) AS total,
 
-        -- Datos de todas las cuotas (Original + Final)
-        COALESCE(t.total_cuotas,0) AS total_cuotas,
-        COALESCE(t.liquidadas,0) AS liquidadas
+    COALESCE(t.total_cuotas,0) AS total_cuotas,
+    COALESCE(t.liquidadas,0) AS liquidadas
 
-      FROM clientes c
+  FROM clientes c
 
-      -- Subconsulta de cuotas Final
-      LEFT JOIN (
-        SELECT 
-          cuil_cuit,
-          SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
-          COUNT(*) AS total_final
-        FROM cuotas
-        WHERE parcialidad = 'Final'
-        GROUP BY cuil_cuit
-      ) f ON c.cuil_cuit = f.cuil_cuit
+  LEFT JOIN (
+    SELECT 
+      cuil_cuit,
+      id_lote,
+      SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+      SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+      COUNT(*) AS total_final
+    FROM cuotas
+    WHERE parcialidad = 'Final'
+    GROUP BY cuil_cuit, id_lote
+  ) f 
+    ON c.cuil_cuit = f.cuil_cuit
 
-      -- Subconsulta de todas las cuotas
-      LEFT JOIN (
-        SELECT
-          cuil_cuit,
-          COUNT(*) AS total_cuotas,
-          SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
-        FROM cuotas
-        WHERE parcialidad IN ('Final','Original')
-        GROUP BY cuil_cuit
-      ) t ON c.cuil_cuit = t.cuil_cuit
+  LEFT JOIN (
+    SELECT
+      cuil_cuit,
+      id_lote,
+      COUNT(*) AS total_cuotas,
+      SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
+    FROM cuotas
+    WHERE parcialidad IN ('Final','Original')
+    GROUP BY cuil_cuit, id_lote
+  ) t 
+    ON c.cuil_cuit = t.cuil_cuit 
+   AND f.id_lote = t.id_lote
 
-      WHERE c.zona = 'PIT'
-      ORDER BY f.debe DESC
-    `);
+  WHERE c.zona = 'PIT'
+  ORDER BY f.debe DESC
+`);
 
     const clientes = detalle.map(c => {
       const total = Number(c.total);
