@@ -789,7 +789,10 @@ const deudores = async (req, res) => {
     COALESCE(f.total_final,0) AS total,
 
     COALESCE(t.total_cuotas,0) AS total_cuotas,
-    COALESCE(t.liquidadas,0) AS liquidadas
+    COALESCE(t.liquidadas,0) AS liquidadas,
+
+    COALESCE(p.total_devengado,0) AS total_devengado,
+    COALESCE(p.pagado,0) AS pagado
 
   FROM clientes c
 
@@ -803,8 +806,7 @@ const deudores = async (req, res) => {
     FROM cuotas
     WHERE parcialidad = 'Final'
     GROUP BY cuil_cuit, id_lote
-  ) f 
-    ON c.cuil_cuit = f.cuil_cuit
+  ) f ON c.cuil_cuit = f.cuil_cuit
 
   LEFT JOIN (
     SELECT
@@ -818,6 +820,21 @@ const deudores = async (req, res) => {
   ) t 
     ON c.cuil_cuit = t.cuil_cuit 
    AND f.id_lote = t.id_lote
+
+  LEFT JOIN (
+    SELECT 
+      cuotas.cuil_cuit,
+      cuotas.id_lote,
+      SUM(cuotas.cuota_con_ajuste) AS total_devengado,
+      COALESCE(SUM(pagos.monto),0) AS pagado
+    FROM cuotas
+    LEFT JOIN pagos 
+      ON cuotas.id = pagos.id_cuota
+    WHERE cuotas.parcialidad = 'Final'
+    GROUP BY cuotas.cuil_cuit, cuotas.id_lote
+  ) p
+    ON c.cuil_cuit = p.cuil_cuit
+   AND f.id_lote = p.id_lote
 
   WHERE c.zona = 'PIT'
   ORDER BY f.debe DESC
@@ -834,7 +851,8 @@ const deudores = async (req, res) => {
         id: c.id,
         nombre: c.nombre,
         cuil_cuit: c.cuil_cuit,
-
+total_devengado: Number(c.total_devengado),
+pagado: Number(c.pagado),
         debe,
         pagadas,
         total,
