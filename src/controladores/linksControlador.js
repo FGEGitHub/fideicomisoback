@@ -777,7 +777,7 @@ const deudores = async (req, res) => {
   try {
 
     // ====== 1) DETALLE POR CLIENTE ======
-    const detalle = await pool.query(`
+ const detalle = await pool.query(`
 SELECT * FROM (
 
 /* =======================================================
@@ -807,8 +807,8 @@ LEFT JOIN (
     SELECT 
       cuil_cuit,
       id_lote,
-      SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-      SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+      SUM(CASE WHEN diferencia < 0 AND ABS(diferencia) > 1 THEN 1 ELSE 0 END) AS debe,
+      SUM(CASE WHEN diferencia >= 0 OR ABS(diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
       COUNT(*) AS total_final
     FROM cuotas
     WHERE parcialidad = 'Final'
@@ -845,15 +845,16 @@ LEFT JOIN (
     SELECT
       cuil_cuit,
       id_lote,
-     JSON_ARRAYAGG(
-  JSON_OBJECT(
-    'fecha', CONCAT(LPAD(mes,2,'0'),'/',anio),
-    'monto', ABS(diferencia)
-  )
-) AS cuotasquedebe
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'fecha', CONCAT(LPAD(mes,2,'0'),'/',anio),
+          'monto', ABS(diferencia)
+        )
+      ) AS cuotasquedebe
     FROM cuotas
     WHERE parcialidad = 'Final'
-      AND diferencia < -1
+      AND diferencia < 0
+      AND ABS(diferencia) > 1
       AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
     GROUP BY cuil_cuit, id_lote
 ) q ON c.cuil_cuit = q.cuil_cuit AND f.id_lote = q.id_lote
@@ -873,22 +874,22 @@ SELECT
     c.cuil_cuit,
     NULL AS id_lote,
 
-    SUM(CASE WHEN d.diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-    SUM(CASE WHEN d.diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+    SUM(CASE WHEN d.diferencia < 0 AND ABS(d.diferencia) > 1 THEN 1 ELSE 0 END) AS debe,
+    SUM(CASE WHEN d.diferencia >= 0 OR ABS(d.diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
     COUNT(*) AS total,
 
     COUNT(*) AS total_cuotas,
-    SUM(CASE WHEN d.diferencia >= -1 THEN 1 ELSE 0 END) AS liquidadas,
+    SUM(CASE WHEN d.diferencia >= 0 OR ABS(d.diferencia) <= 1 THEN 1 ELSE 0 END) AS liquidadas,
 
     SUM(ci.cuota_con_ajuste) AS total_devengado,
     SUM(ci.pagado) AS pagado,
 
     JSON_ARRAYAGG(
-  JSON_OBJECT(
-    'fecha', CONCAT(LPAD(ci.mes,2,'0'),'/',ci.anio),
-    'monto', ABS(d.diferencia)
-  )
-) AS cuotasquedebe
+      JSON_OBJECT(
+        'fecha', CONCAT(LPAD(ci.mes,2,'0'),'/',ci.anio),
+        'monto', ABS(d.diferencia)
+      )
+    ) AS cuotasquedebe
 
 FROM clientes c
 
@@ -916,7 +917,7 @@ JOIN (
    GROUP BY ci2.id
 ) d ON ci.id = d.id
 
-WHERE c.zona <> 'PIT'
+WHERE c.zona <> 'PIT' or  c.id = 10000603
 GROUP BY c.id, c.nombre, c.cuil_cuit
 HAVING debe > 0
 

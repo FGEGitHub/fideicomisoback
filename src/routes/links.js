@@ -369,7 +369,7 @@ router.get('/listaic3', async (req, res) => {
       ) ultimas 
         ON ultimas.id_cliente = ci.id_cliente
        AND (ci.anio * 100 + ci.mes) = ultimas.max_fecha
-      WHERE c.zona = "IC3" or c.zona = "corrientes"
+      WHERE c.zona = "IC3" or c.zona = "corrientes" or c.id= 10000603
       ORDER BY ci.anio DESC, ci.mes DESC
     `);
 
