@@ -778,6 +778,7 @@ const deudores = async (req, res) => {
 
     // ====== 1) DETALLE POR CLIENTE ======
  const detalle = await pool.query(`
+
 SELECT * FROM (
 
 /* =======================================================
@@ -807,7 +808,14 @@ LEFT JOIN (
     SELECT 
       cuil_cuit,
       id_lote,
-      SUM(CASE WHEN diferencia < 0 AND ABS(diferencia) > 1 THEN 1 ELSE 0 END) AS debe,
+      SUM(
+        CASE 
+          WHEN diferencia < 0 
+           AND ABS(diferencia) > 1
+           AND (compensada = 'No' OR compensada IS NULL)
+          THEN 1 ELSE 0 
+        END
+      ) AS debe,
       SUM(CASE WHEN diferencia >= 0 OR ABS(diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
       COUNT(*) AS total_final
     FROM cuotas
@@ -855,6 +863,7 @@ LEFT JOIN (
     WHERE parcialidad = 'Final'
       AND diferencia < 0
       AND ABS(diferencia) > 1
+      AND (compensada = 'No' OR compensada IS NULL)
       AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
     GROUP BY cuil_cuit, id_lote
 ) q ON c.cuil_cuit = q.cuil_cuit AND f.id_lote = q.id_lote
@@ -874,7 +883,15 @@ SELECT
     c.cuil_cuit,
     NULL AS id_lote,
 
-    SUM(CASE WHEN d.diferencia < 0 AND ABS(d.diferencia) > 1 THEN 1 ELSE 0 END) AS debe,
+    SUM(
+      CASE 
+        WHEN d.diferencia < 0 
+         AND ABS(d.diferencia) > 1
+         AND (ci.compensada = 'No' OR ci.compensada IS NULL)
+        THEN 1 ELSE 0 
+      END
+    ) AS debe,
+
     SUM(CASE WHEN d.diferencia >= 0 OR ABS(d.diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
     COUNT(*) AS total,
 
@@ -885,10 +902,16 @@ SELECT
     SUM(ci.pagado) AS pagado,
 
     JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'fecha', CONCAT(LPAD(ci.mes,2,'0'),'/',ci.anio),
-        'monto', ABS(d.diferencia)
-      )
+      CASE 
+        WHEN d.diferencia < 0 
+         AND ABS(d.diferencia) > 1
+         AND (ci.compensada = 'No' OR ci.compensada IS NULL)
+        THEN JSON_OBJECT(
+          'fecha', CONCAT(LPAD(ci.mes,2,'0'),'/',ci.anio),
+          'monto', ABS(d.diferencia)
+        )
+        ELSE NULL
+      END
     ) AS cuotasquedebe
 
 FROM clientes c
@@ -900,6 +923,7 @@ JOIN (
         ci.mes,
         ci.anio,
         ci.cuota_con_ajuste,
+        ci.compensada,
         COALESCE(SUM(pi.monto),0) AS pagado
     FROM cuotas_ic3 ci
     LEFT JOIN pagos_ic3 pi ON ci.id = pi.id_cuota
@@ -917,7 +941,7 @@ JOIN (
    GROUP BY ci2.id
 ) d ON ci.id = d.id
 
-WHERE c.zona <> 'PIT' or  c.id = 10000603
+WHERE c.zona <> 'PIT' OR c.id = 10000603
 GROUP BY c.id, c.nombre, c.cuil_cuit
 HAVING debe > 0
 

@@ -23,6 +23,49 @@ const cuotasdeunlote = async (req, res) => {
 
 
 
+const compensar = async (req, res) => {
+  try {
+    const { id_compensada, id_dedonde } = req.body;
+
+    if (!id_compensada || !id_dedonde) {
+      return res.status(400).json("Datos incompletos");
+    }
+
+    await pool.query(
+      "UPDATE cuotas SET compensada = ? WHERE id = ?",
+      [id_compensada, id_dedonde]
+    );
+
+    res.json("Cuota compensada correctamente");
+  } catch (error) {
+    console.error(error);
+    res.status(500).json("Error al compensar cuota");
+  }
+};
+
+
+const compensaric3 = async (req, res) => {
+  try {
+    const { id_compensada, id_dedonde } = req.body;
+
+    if (!id_compensada || !id_dedonde) {
+      return res.status(400).json("Datos incompletos");
+    }
+
+    await pool.query(
+      "UPDATE cuotas_ic3 SET compensada = ? WHERE id = ?",
+      [id_compensada, id_dedonde]
+    );
+
+    res.json("Cuota compensada correctamente");
+  } catch (error) {
+    console.error(error);
+    res.status(500).json("Error al compensar cuota");
+  }
+};
+
+
+
 const borrarpago = async (req, res) => {
     const { id_cuota } = req.body;
     try {
@@ -790,6 +833,7 @@ const lotefuncion2 = async (req, res) => {
                 interes,
                 pago_interes: cuotas[0]['pago_interes'],
                 cuota_cancelada: cuotas[0]['cuota_cancelada'],
+                   compensada: cuotas[0]['compensada'],
                 comprobante,
 
             }
@@ -922,6 +966,7 @@ pagostodos= await pool.query('select * from pagos where id_cuota = ?', [cuotas[i
                         interes,
                         pago_interes: cuotas[i]['pago_interes'],
                         cuota_cancelada: cuotas[i]['cuota_cancelada'],
+                         compensada: cuotas[i]['compensada'],
                         comprobante
                     }
                     nuevAct = {
@@ -966,6 +1011,7 @@ pagostodos= await pool.query('select * from pagos where id_cuota = ?', [cuotas[i
                         diferencia: 0,/////realizado,
                         cuota_cancelada: cuotas[i]['cuota_cancelada'],
                         pago_interes: cuotas[i]['pago_interes'],
+                         compensada: cuotas[i]['compensada'],
                     }
                 }
                 cuotasss.push(nuev)
@@ -1828,6 +1874,8 @@ module.exports = {
     ief2,
     borrarpago,
     traercuotasdisponiblesporlote,
-    iefgralleg
+    iefgralleg,
+    compensar,
+    compensaric3
 
 }

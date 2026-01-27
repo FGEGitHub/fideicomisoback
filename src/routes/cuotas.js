@@ -4,7 +4,7 @@ const pool = require('../database')
 
 const { isLoggedIn, isLoggedInn2, isLoggedInn4, isLoggedInn } = require('../lib/auth') //proteger profile
 
-const { cancelarlote,addautvarias, cuotasdeunlote, postadd, postaddaut2, lotefuncion2, post_agregaricc, asignarloteacuotas, modificarmontototal, traercuotaselcliente, listavarios, deletes, postcuotas, actualizarcuota, borrartodas, ief, traercuota, traercuotasfinales, agregarcuotasleg, vercuotas2, vercuotas4, ief2, borrarpago, traercuotasdisponiblesporlote, iefgralleg } = require('../controladores/cuotasControlador')
+const {compensaric3, compensar, cancelarlote,addautvarias, cuotasdeunlote, postadd, postaddaut2, lotefuncion2, post_agregaricc, asignarloteacuotas, modificarmontototal, traercuotaselcliente, listavarios, deletes, postcuotas, actualizarcuota, borrartodas, ief, traercuota, traercuotasfinales, agregarcuotasleg, vercuotas2, vercuotas4, ief2, borrarpago, traercuotasdisponiblesporlote, iefgralleg } = require('../controladores/cuotasControlador')
 
 
 
@@ -22,7 +22,9 @@ router.post('/borrarpago', borrarpago)
 
 
 
+router.post('/compensar', compensar)
 
+router.post('/compensaric3', compensaric3)
 
 
 // AGREGA VARIAS CUOTAS 
@@ -197,7 +199,8 @@ console.log('ok')
                         iva: cuota.iva,
                         saldo_cierre: cuota.saldo_cierre,
                         saldo_final,
-                        saldo_real
+                        saldo_real,
+                        compensada: cuota.compensada
                     };
     
                     env.push(nuevo);
