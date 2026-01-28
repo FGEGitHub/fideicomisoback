@@ -788,6 +788,7 @@ SELECT
     c.id,
     c.nombre,
     c.cuil_cuit,
+      c.zona,
     f.id_lote,
 
     COALESCE(f.debe,0) AS debe,
@@ -881,6 +882,7 @@ SELECT
     c.id,
     c.nombre,
     c.cuil_cuit,
+    c.zona,
     NULL AS id_lote,
 
     SUM(
