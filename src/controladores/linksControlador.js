@@ -777,7 +777,7 @@ const deudores = async (req, res) => {
   try {
 
     // ====== 1) DETALLE POR CLIENTE ======
- const detalle = await pool.query(`
+const detalle = await pool.query(`
 
 SELECT * FROM (
 
@@ -788,7 +788,7 @@ SELECT
     c.id,
     c.nombre,
     c.cuil_cuit,
-      c.zona,
+    c.zona,
     f.id_lote,
 
     COALESCE(f.debe,0) AS debe,
@@ -817,7 +817,18 @@ LEFT JOIN (
           THEN 1 ELSE 0 
         END
       ) AS debe,
-      SUM(CASE WHEN diferencia >= 0 OR ABS(diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
+
+      SUM(
+        CASE 
+          WHEN NOT (
+            diferencia < 0 
+            AND ABS(diferencia) > 1
+            AND (compensada = 'No' OR compensada IS NULL)
+          )
+          THEN 1 ELSE 0 
+        END
+      ) AS pagadas,
+
       COUNT(*) AS total_final
     FROM cuotas
     WHERE parcialidad = 'Final'
@@ -887,34 +898,40 @@ SELECT
 
     SUM(
       CASE 
-        WHEN d.diferencia < 0 
-         AND ABS(d.diferencia) > 1
+        WHEN d.diferencia > 1 
+       
          AND (ci.compensada = 'No' OR ci.compensada IS NULL)
         THEN 1 ELSE 0 
       END
     ) AS debe,
 
-    SUM(CASE WHEN d.diferencia >= 0 OR ABS(d.diferencia) <= 1 THEN 1 ELSE 0 END) AS pagadas,
-    COUNT(*) AS total,
+    SUM(
+      CASE 
+        WHEN NOT (
+          d.diferencia > 1 
+         
+          AND (ci.compensada = 'No' OR ci.compensada IS NULL)
+        )
+        THEN 1 ELSE 0 
+      END
+    ) AS pagadas,
 
+    COUNT(*) AS total,
     COUNT(*) AS total_cuotas,
-    SUM(CASE WHEN d.diferencia >= 0 OR ABS(d.diferencia) <= 1 THEN 1 ELSE 0 END) AS liquidadas,
+
+    SUM(
+      CASE 
+        WHEN NOT (
+         ajuste is null
+        )
+        THEN 1 ELSE 0 
+      END
+    ) AS liquidadas,
 
     SUM(ci.cuota_con_ajuste) AS total_devengado,
     SUM(ci.pagado) AS pagado,
 
-    JSON_ARRAYAGG(
-      CASE 
-        WHEN d.diferencia < 0 
-         AND ABS(d.diferencia) > 1
-         AND (ci.compensada = 'No' OR ci.compensada IS NULL)
-        THEN JSON_OBJECT(
-          'fecha', CONCAT(LPAD(ci.mes,2,'0'),'/',ci.anio),
-          'monto', ABS(d.diferencia)
-        )
-        ELSE NULL
-      END
-    ) AS cuotasquedebe
+    COALESCE(MAX(q2.cuotasquedebe), JSON_ARRAY()) AS cuotasquedebe
 
 FROM clientes c
 
@@ -925,6 +942,7 @@ JOIN (
         ci.mes,
         ci.anio,
         ci.cuota_con_ajuste,
+        ci.ajuste,
         ci.compensada,
         COALESCE(SUM(pi.monto),0) AS pagado
     FROM cuotas_ic3 ci
@@ -943,14 +961,43 @@ JOIN (
    GROUP BY ci2.id
 ) d ON ci.id = d.id
 
+LEFT JOIN (
+    SELECT
+        t.id_cliente,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'fecha', CONCAT(LPAD(t.mes,2,'0'),'/',t.anio),
+              'monto', ABS(t.diferencia)
+            )
+        ) AS cuotasquedebe
+    FROM (
+        SELECT
+            ci3.id_cliente,
+            ci3.mes,
+            ci3.anio,
+            (ci3.cuota_con_ajuste - COALESCE(SUM(pi3.monto),0)) AS diferencia,
+            ci3.compensada
+        FROM cuotas_ic3 ci3
+        LEFT JOIN pagos_ic3 pi3 ON ci3.id = pi3.id_cuota
+        WHERE NOT (ci3.mes = MONTH(CURDATE()) AND ci3.anio = YEAR(CURDATE()))
+        GROUP BY ci3.id
+    ) t
+    WHERE t.diferencia > 0
+      
+      AND (t.compensada = 'No' OR t.compensada IS NULL)
+    GROUP BY t.id_cliente
+) q2 ON c.id = q2.id_cliente
+
 WHERE c.zona <> 'PIT' OR c.id = 10000603
-GROUP BY c.id, c.nombre, c.cuil_cuit
+GROUP BY c.id, c.nombre, c.cuil_cuit, c.zona
 HAVING debe > 0
 
 ) AS resultado
 
 ORDER BY debe DESC;
+
 `);
+
 
     const clientes = detalle.map(c => {
       const total = Number(c.total);
