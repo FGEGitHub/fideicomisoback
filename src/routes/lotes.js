@@ -650,67 +650,110 @@ router.post('/calcularvalor', async (req, res) => {
 })
 
 router.post('/guardarpoligono', async (req, res) => {
-    
+
   try {
     const {
       id_mapa,
+
       dato1 = null,
       capa = null,
       subclasificacion = null,
-      descripcion = null
+      descripcion = null,
+
+      cuil_cuit = null,
+      adrema = null,
+      superficie = null,
+      nombre = null,
+      mensura = null
+
     } = req.body;
 
     if (!id_mapa) {
       return res.status(400).json({ error: "El campo 'id_mapa' es obligatorio." });
     }
 
-    // Buscar si ya existe el polígono con ese id_mapa (y opcionalmente capa si querés más precisión)
+    // Buscar si existe
     const rows = await pool.query(
       `SELECT * FROM poligonos WHERE id_mapa = ?`,
       [id_mapa]
     );
 
     if (rows.length > 0) {
-      // Ya existe: actualizar solo los campos que se enviaron
+
+      // ===============================
+      // UPDATE DINÁMICO
+      // ===============================
       const updates = [];
       const values = [];
 
-      if ((dato1 != null) && (dato1 != "") )  {
-       
-        updates.push("dato1 = ?");
-        values.push(dato1);
-      }
-      if ((subclasificacion != null) ) {
-        updates.push("subclasificacion = ?");
-        values.push(subclasificacion);
-      }
-      if (descripcion !== null) {
-        updates.push("descripcion = ?");
-        values.push(descripcion);
-      }
-      if (capa != null) {
-        updates.push("capa = ?");
-        values.push(capa);
-      }
-console.log(updates)
+      const addIfValid = (field, value) => {
+        if (value !== null && value !== undefined && value !== "") {
+          updates.push(`${field} = ?`);
+          values.push(value);
+        }
+      };
+
+      // Campos base
+      addIfValid("dato1", dato1);
+      addIfValid("subclasificacion", subclasificacion);
+      addIfValid("descripcion", descripcion);
+      addIfValid("capa", capa);
+
+      // Campos nuevos
+      addIfValid("cuil_cuit", cuil_cuit);
+      addIfValid("adrema", adrema);
+      addIfValid("superficie", superficie);
+      addIfValid("nombre", nombre);
+      addIfValid("mensura", mensura);
+
       if (updates.length > 0) {
         values.push(id_mapa);
+
         await pool.query(
-          `UPDATE poligonos SET ${updates.join(", ")} WHERE id_mapa = ?`,
+          `UPDATE poligonos 
+           SET ${updates.join(", ")} 
+           WHERE id_mapa = ?`,
           values
         );
       }
 
-      res.json({ mensaje: 'Polígono actualizado correctamente' });
+      return res.json({ mensaje: 'Polígono actualizado correctamente' });
 
     } else {
-      // Insertar nuevo polígono
+
+      // ===============================
+      // INSERT
+      // ===============================
       await pool.query(
-        `INSERT INTO poligonos (id_mapa, dato1, subclasificacion, descripcion, capa)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id_mapa, dato1, subclasificacion, descripcion, capa]
+        `INSERT INTO poligonos 
+        (
+          id_mapa,
+          dato1,
+          subclasificacion,
+          descripcion,
+          capa,
+          cuil_cuit,
+          adrema,
+          superficie,
+          nombre,
+          mensura
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id_mapa,
+          dato1,
+          subclasificacion,
+          descripcion,
+          capa,
+          cuil_cuit,
+          adrema,
+          superficie,
+          nombre,
+          mensura
+        ]
       );
-      res.json({ mensaje: 'Polígono guardado correctamente' });
+
+      return res.json({ mensaje: 'Polígono guardado correctamente' });
     }
 
   } catch (error) {
@@ -718,6 +761,7 @@ console.log(updates)
     res.status(500).json({ error: 'Error del servidor' });
   }
 });
+
 
 
 router.get('/poligonosguardados', async (req, res) => {
