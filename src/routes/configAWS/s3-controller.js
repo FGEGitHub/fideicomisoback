@@ -1210,8 +1210,7 @@ async function cancelarloteic3(req, res) {
 
         const filename = req.file ? req.file.filename : 'sin comprobante';
 
-        console.log(mes, anio, id_lote, cuil_cuit_administrador, cbu, fecha, filename);
-        console.log('fecha de notificacion',mes,anio)
+     
 /////////////////
  
         // 1. Traer las cuotas del lote ordenadas por nro_cuota
@@ -1444,10 +1443,8 @@ function formatearFecha(fecha) {
 /////////////////////pagar nivel 2 directamente aprobado 
 async function pagonivel2(req, res) {
     let { id_cuota, cuil_cuit, pago, cbu, fecha } = req.body;
-    console.log(id_cuota, cuil_cuit, pago, cbu, fecha)
     const filename = req.file ? req.file.filename : 'sin comprobante';
 
-   
 
 
     cuil_cuit_administrador = cuil_cuit/// del administrador

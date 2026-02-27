@@ -1341,25 +1341,51 @@ const cbusPendientes = async (req, res) => {
 }
 
 const legajosCuil = async (req, res) => {
-    const cuil_cuit = req.params.cuil_cuit
-    //  fs.writeFileSync(path.join(__dirname,'../dbimages/'))
+    try {
+        const cuil_cuit = req.params.cuil_cuit;
 
+        const legajos = await pool.query(
+            'select * from constancias where cuil_cuit =?', 
+            [cuil_cuit]
+        );
 
-    const legajos = await pool.query('select * from constancias where cuil_cuit =?', [cuil_cuit])
-    const array2 = await pool.query('select id, lazo as tipo, descripcion, cuil_cuit, estado,ubicacion  from cbus where cuil_cuit =?', [cuil_cuit])
-    const result = legajos.concat(array2);
-    const cl = await pool.query('select * from clientes where cuil_cuit =?', [cuil_cuit])
-    /*  legajos.map(img => {
-          fs.writeFileSync(path.join(__dirname, '../dbimages/' + img.id + '--.png'), img.comprobante)
-  
-      })
-      const imagedir = fs.readdirSync(path.join(__dirname, '../dbimages/'))*/
-    console.log(result)
-    console.log('result')
-    res.json([result, cl])
+        const array2 = await pool.query(
+            'select id, lazo as tipo, descripcion, cuil_cuit, estado, ubicacion from cbus where cuil_cuit =?', 
+            [cuil_cuit]
+        );
 
+        const result = legajos.concat(array2);
 
-}
+        // 🔹 Verificación de existencia del archivo
+        const resultConComprobante = await Promise.all(
+            result.map(async (item) => {
+                if (item.ubicacion) {
+                    const rutaArchivo = path.join(__dirname, '../documentos', item.ubicacion);
+
+                    try {
+                        await fs.promises.access(rutaArchivo);
+                        return { ...item, comprobanteok: "Si" };
+                    } catch (error) {
+                        return { ...item, comprobanteok: "No" };
+                    }
+                } else {
+                    return { ...item, comprobanteok: "No" };
+                }
+            })
+        );
+
+        const cl = await pool.query(
+            'select * from clientes where cuil_cuit =?', 
+            [cuil_cuit]
+        );
+
+        res.json([resultConComprobante, cl]);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+};
 const ventalotee = async (req, res) => {
     let { zona, manzana, fraccion, parcela, cuil_cuit, lote, estado } = req.body
 
