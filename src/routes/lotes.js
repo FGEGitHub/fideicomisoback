@@ -652,21 +652,21 @@ router.post('/calcularvalor', async (req, res) => {
 router.post('/guardarpoligono', async (req, res) => {
 
   try {
-    const {
-      id_mapa,
-
-      dato1 = null,
-      capa = null,
-      subclasificacion = null,
-      descripcion = null,
-
-      cuil_cuit = null,
-      adrema = null,
-      superficie = null,
-      nombre = null,
-      mensura = null
-
-    } = req.body;
+ const {
+  id_mapa,
+  dato1 = null,
+  capa = null,
+  subclasificacion = null,
+  descripcion = null,
+  privado = null,   // 👈 NUEVO
+  cuil_cuit = null,
+  adrema = null,
+  superficie = null,
+  nombre = null,
+  mensura = null,
+  judicializado
+} = req.body;
+console.log(req.body)
 
     if (!id_mapa) {
       return res.status(400).json({ error: "El campo 'id_mapa' es obligatorio." });
@@ -698,7 +698,8 @@ router.post('/guardarpoligono', async (req, res) => {
       addIfValid("subclasificacion", subclasificacion);
       addIfValid("descripcion", descripcion);
       addIfValid("capa", capa);
-
+      addIfValid("privado", privado); // 👈 NUEVO
+     addIfValid("judicializado", judicializado); // 👈 NUEVO
       // Campos nuevos
       addIfValid("cuil_cuit", cuil_cuit);
       addIfValid("adrema", adrema);
@@ -736,9 +737,11 @@ router.post('/guardarpoligono', async (req, res) => {
           adrema,
           superficie,
           nombre,
-          mensura
+          mensura,
+          judicializado,
+          privado
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id_mapa,
           dato1,
@@ -749,7 +752,9 @@ router.post('/guardarpoligono', async (req, res) => {
           adrema,
           superficie,
           nombre,
-          mensura
+          mensura,
+           judicializado,
+          privado
         ]
       );
 
