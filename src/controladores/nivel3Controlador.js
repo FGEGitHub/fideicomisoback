@@ -1,7 +1,6 @@
 const express = require('express')
 const router = express.Router()
 const pool = require('../database')
-const ponerguion = require('../public/apps/transformarcuit')
 const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport = require('passport')
@@ -306,7 +305,104 @@ const agregarIccGral2 = async (req, res,) => {
     }
     res.send('Icc asignado con éxito');
 }
+
+
+
+
+
+const subirexceldemovimientos = async (req, res) => {
+
+try{
+
+if(!req.file){
+return res.status(400).json({error:"No se envió archivo"});
+}
+
+const workbook = XLSX.read(req.file.buffer,{ type:"buffer" });
+
+const sheetName = workbook.SheetNames[0];
+const sheet = workbook.Sheets[sheetName];
+
+const data = XLSX.utils.sheet_to_json(sheet,{ defval:"" });
+
+console.log("Cantidad de filas:",data.length);
+
+let insertados = 0;
+let duplicados = 0;
+
+for(const fila of data){
+
+const fecha = fila["FECHA"];
+
+// ignorar filas vacías o textos del banco
+if(!fecha || typeof fecha !== "string" && typeof fecha !== "number"){
+continue;
+}
+
+// evitar textos largos en la columna fecha
+if(fecha.toString().length > 15){
+console.log("Fila ignorada por texto:", fecha);
+continue;
+}
+
+const descripcion = fila["DESCRIPCION"] || "";
+
+let debito = fila["DEBITO EN $"] || 0;
+let credito = fila["CREDITO EN $"] || 0;
+
+// limpiar números
+debito = debito.toString().replace(/\./g,"").replace(",",".");
+credito = credito.toString().replace(/\./g,"").replace(",",".");
+debito = parseFloat(debito) || 0;
+credito = parseFloat(credito) || 0;
+
+const monto = debito > 0 ? debito : credito;
+
+// verificar duplicado
+const existe = await pool.query(
+`SELECT id FROM movimientos 
+WHERE fecha = ? AND (debito = ? OR credito = ?) 
+LIMIT 1`,
+[fecha,debito,credito]
+);
+
+if(existe.length > 0){
+duplicados++;
+continue;
+}
+
+// insertar
+await pool.query(
+`INSERT INTO movimientos
+(fecha,debito,credito,descripcion)
+VALUES (?,?,?,?)`,
+[fecha,debito,credito,descripcion]
+);
+
+insertados++;
+
+}
+
+res.json({
+mensaje:"Importación finalizada",
+filas:data.length,
+insertados,
+duplicados
+});
+
+}catch(error){
+
+console.error(error);
+res.status(500).json({error:"Error procesando Excel"});
+
+}
+
+};
+
+
+
 module.exports = {
+    subirexceldemovimientos,
     historialIcc,
     pagoSi,
     borrarHistorial,
