@@ -156,6 +156,49 @@ const agregarIccgral = async (req, res,) => {
     res.send('Icc asignado con éxito');
 }
 
+
+
+
+const enviarmovimiento = async (req, res) => {
+
+let { tipo, categoria, monto, medio_pago, detalle, fecha } = req.body;
+
+let debito = null;
+let credito = null;
+
+if (tipo === "egreso") {
+    debito = monto;
+}
+
+if (tipo === "ingreso") {
+    credito = monto;
+}
+
+let datoss = {
+    fecha: fecha ? fecha : new Date(),
+    concepto: categoria || null,
+    debito: debito,
+    credito: credito,
+    descripcion: detalle || null
+}
+
+try {
+
+    await pool.query('insert into movimientos set ?', datoss)
+
+    res.send("Movimiento guardado con éxito")
+
+} catch (error) {
+
+    console.log(error)
+    res.status(500).send("Error al guardar movimiento")
+
+}
+
+}
+
+
+
 const agregarIccGral2 = async (req, res,) => {
     let { ICC, mes, anio, zona } = req.body;
 
@@ -271,7 +314,8 @@ module.exports = {
     asignarvalormetroc,
     consultarIcc,
     agregarIccgral,
-    agregarIccGral2
+    agregarIccGral2,
+    enviarmovimiento
 
 
 }

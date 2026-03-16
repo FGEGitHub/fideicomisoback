@@ -649,7 +649,7 @@ router.post('/calcularvalor', async (req, res) => {
 
 })
 
-router.post('/guardarpoligono', async (req, res) => {
+router.post('/guardarpoligonoo', async (req, res) => {
 
   try {
  const {
@@ -666,6 +666,7 @@ router.post('/guardarpoligono', async (req, res) => {
   mensura = null,
   judicializado
 } = req.body;
+console.log("Datos recibidos para guardar polígono:")
 console.log(req.body)
 
     if (!id_mapa) {

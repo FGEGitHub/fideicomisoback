@@ -1635,6 +1635,7 @@ console.log('guar',newLink)
             anio,
             zona: "Otra",
             proceso: "averificarnivel3",
+            tipologia: "Pago monto inusual",
             cuil_cuit_administrador,
             ubicacion: filename,///////////aca ver el problema
             fecha

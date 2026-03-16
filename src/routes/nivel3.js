@@ -7,7 +7,7 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport= require('passport')
 const agregaricc = require('./funciones/agregaricc')
-const { historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2 } = require('../controladores/nivel3Controlador')
+const { enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2 } = require('../controladores/nivel3Controlador')
 
 router.post('/signupp', isLoggedInn3, passport.authenticate('local.signupnivel3', {
     successRedirect: '/exitosignup',
@@ -47,6 +47,9 @@ router.post('/agregariccgral22', isLoggedInn3,agregarIccGral2)
 
 //ACCESO A MENU DE USUARIO NIVEL 2
 // AGREGAR USUARIO 
+
+
+router.post('/enviarmovimiento', enviarmovimiento)
 
 
 router.post('/agregarunusuario', async (req, res,) => {
