@@ -7,7 +7,7 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport= require('passport')
 const agregaricc = require('./funciones/agregaricc')
-const {subirexceldemovimientos , enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2 } = require('../controladores/nivel3Controlador')
+const {traermovimientos, subirexceldemovimientos , enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2 } = require('../controladores/nivel3Controlador')
 const multer = require("multer");
 router.post('/signupp', isLoggedInn3, passport.authenticate('local.signupnivel3', {
     successRedirect: '/exitosignup',
@@ -15,8 +15,12 @@ router.post('/signupp', isLoggedInn3, passport.authenticate('local.signupnivel3'
     failureFlash:true
 
 }))
+
 const upload = multer({ storage: multer.memoryStorage() });
+
 //REACT GET HISTORIAL
+
+
 router.get('/historialicc', isLoggedInn3, historialIcc)
 
 
@@ -48,6 +52,7 @@ router.post('/agregariccgral22', isLoggedInn3,agregarIccGral2)
 //ACCESO A MENU DE USUARIO NIVEL 2
 // AGREGAR USUARIO 
 
+router.get('/traermovimientos', traermovimientos)
 
 router.post('/enviarmovimiento', enviarmovimiento)
 

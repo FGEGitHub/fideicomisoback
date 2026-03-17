@@ -5,7 +5,58 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport = require('passport')
 const agregaricc = require('../routes/funciones/agregaricc')
+function analizarDescripcion(texto){
 
+let cuit = null;
+let razon_social = null;
+let concepto = null;
+
+if(!texto) return {cuit,razon_social,concepto};
+
+// detectar CUIT (11 números)
+const cuitMatch = texto.match(/\b\d{11}\b/);
+
+if(cuitMatch){
+
+cuit = cuitMatch[0];
+
+// separar lo que viene después del CUIT
+const partes = texto.split(cuit);
+
+if(partes[1]){
+razon_social = partes[1].trim();
+}
+
+}
+
+// detectar concepto
+if(texto.includes("RECIBISTE UNA TRANSFERENCIA"))
+concepto = "Transferencia recibida";
+
+else if(texto.includes("TRANSF CASH OUT"))
+concepto = "Transferencia recibida";
+
+else if(texto.includes("DB TRF TERCEROS"))
+concepto = "Pago a proveedor";
+
+else if(texto.includes("RETENCION ING. BRUTOS"))
+concepto = "Impuestos - DGR";
+
+else if(texto.includes("25413"))
+concepto = "Impuestos - AFIP";
+
+else if(texto.includes("COMISION TRANSFERENCIA"))
+concepto = "Comisiones bancarias";
+
+else if(texto.includes("DEBITO FISCAL IVA"))
+concepto = "Impuestos IVA";
+
+else
+concepto = "Otros movimientos";
+
+return {cuit,razon_social,concepto};
+
+}
 
 const historialIcc = async (req, res) => {
 
@@ -306,99 +357,177 @@ const agregarIccGral2 = async (req, res,) => {
     res.send('Icc asignado con éxito');
 }
 
+const traermovimientos = async (req, res) => {
+  try {
 
+    const movimientos = await pool.query(
+      `SELECT 
+        id,
+        fecha,
+        debito,
+        credito,
+        descripcion,
+        cuil_cuit,
+        nombre_razon,
+        concepto
+      FROM movimientos
+      ORDER BY fecha ASC`
+    );
 
+    res.json(movimientos);
 
-
-const subirexceldemovimientos = async (req, res) => {
-
-try{
-
-if(!req.file){
-return res.status(400).json({error:"No se envió archivo"});
-}
-
-const workbook = XLSX.read(req.file.buffer,{ type:"buffer" });
-
-const sheetName = workbook.SheetNames[0];
-const sheet = workbook.Sheets[sheetName];
-
-const data = XLSX.utils.sheet_to_json(sheet,{ defval:"" });
-
-console.log("Cantidad de filas:",data.length);
-
-let insertados = 0;
-let duplicados = 0;
-
-for(const fila of data){
-
-const fecha = fila["FECHA"];
-
-// ignorar filas vacías o textos del banco
-if(!fecha || typeof fecha !== "string" && typeof fecha !== "number"){
-continue;
-}
-
-// evitar textos largos en la columna fecha
-if(fecha.toString().length > 15){
-console.log("Fila ignorada por texto:", fecha);
-continue;
-}
-
-const descripcion = fila["DESCRIPCION"] || "";
-
-let debito = fila["DEBITO EN $"] || 0;
-let credito = fila["CREDITO EN $"] || 0;
-
-// limpiar números
-debito = debito.toString().replace(/\./g,"").replace(",",".");
-credito = credito.toString().replace(/\./g,"").replace(",",".");
-debito = parseFloat(debito) || 0;
-credito = parseFloat(credito) || 0;
-
-const monto = debito > 0 ? debito : credito;
-
-// verificar duplicado
-const existe = await pool.query(
-`SELECT id FROM movimientos 
-WHERE fecha = ? AND (debito = ? OR credito = ?) 
-LIMIT 1`,
-[fecha,debito,credito]
-);
-
-if(existe.length > 0){
-duplicados++;
-continue;
-}
-
-// insertar
-await pool.query(
-`INSERT INTO movimientos
-(fecha,debito,credito,descripcion)
-VALUES (?,?,?,?)`,
-[fecha,debito,credito,descripcion]
-);
-
-insertados++;
-
-}
-
-res.json({
-mensaje:"Importación finalizada",
-filas:data.length,
-insertados,
-duplicados
-});
-
-}catch(error){
-
-console.error(error);
-res.status(500).json({error:"Error procesando Excel"});
-
-}
-
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Error al traer movimientos"
+    });
+  }
 };
 
+const subirexceldemovimientos = async (req, res) => {
+  try {
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No se envió archivo" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const data = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    console.log("Cantidad de filas:", data.length);
+
+    let insertados = 0;
+    let duplicados = 0;
+
+    const filasError = [];
+    const filasDuplicadas = [];
+    const filasIgnoradas = [];
+
+    for (const fila of data) {
+      try {
+
+        // =========================
+        // 📝 DESCRIPCIÓN (primero así lo usamos en todo)
+        // =========================
+        const descripcion = fila["DESCRIPCION"] || "Sin descripción";
+        const descripcionCorta = descripcion.slice(0, 100);
+
+        // =========================
+        // 📅 PROCESAR FECHA
+        // =========================
+        let fecha = fila["FECHA"];
+
+        if (!fecha) {
+          filasIgnoradas.push({
+            motivo: "Fecha vacía",
+            descripcion: descripcionCorta,
+            fila
+          });
+          continue;
+        }
+
+        if (typeof fecha === "number") {
+          const fechaJS = new Date((fecha - 25569) * 86400 * 1000);
+          fecha = fechaJS.toISOString().split("T")[0];
+        } else if (typeof fecha === "string") {
+          fecha = fecha.trim();
+        } else {
+          filasIgnoradas.push({
+            motivo: "Formato fecha inválido",
+            descripcion: descripcionCorta,
+            fila
+          });
+          continue;
+        }
+
+        // =========================
+        // 🔍 ANALISIS
+        // =========================
+        const { cuit, razon_social, concepto } = analizarDescripcion(descripcion);
+
+        // =========================
+        // 💰 MONTOS
+        // =========================
+        let debito = fila["DEBITO EN $"] || 0;
+        let credito = fila["CREDITO EN $"] || 0;
+
+        debito = debito.toString().replace(/\./g, "").replace(",", ".");
+        credito = credito.toString().replace(/\./g, "").replace(",", ".");
+
+        debito = parseFloat(debito) || 0;
+        credito = parseFloat(credito) || 0;
+
+        if (debito === 0 && credito === 0) {
+          filasIgnoradas.push({
+            motivo: "Sin monto",
+            descripcion: descripcionCorta,
+            fila
+          });
+          continue;
+        }
+
+        // =========================
+        // 🔁 DUPLICADOS
+        // =========================
+        const existe = await pool.query(
+          `SELECT id FROM movimientos 
+           WHERE fecha = ? AND debito = ? AND credito = ?
+           LIMIT 1`,
+          [fecha, debito, credito]
+        );
+
+        if (existe.length > 0) {
+          duplicados++;
+          filasDuplicadas.push({
+            descripcion: descripcionCorta,
+            fila
+          });
+          continue;
+        }
+
+        // =========================
+        // 💾 INSERTAR
+        // =========================
+        await pool.query(
+          `INSERT INTO movimientos
+           (fecha, debito, credito, descripcion, cuil_cuit, nombre_razon, concepto)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [fecha, debito, credito, descripcion, cuit, razon_social, concepto]
+        );
+
+        insertados++;
+
+      } catch (errFila) {
+        filasError.push({
+          error: errFila.message,
+          descripcion: (fila["DESCRIPCION"] || "Sin descripción").slice(0, 100),
+          fila
+        });
+      }
+    }
+
+    res.json({
+      mensaje: "Importación finalizada",
+      filas: data.length,
+      insertados,
+      duplicados,
+      errores: filasError.length,
+      ignoradas: filasIgnoradas.length,
+      detalle: {
+        errores: filasError,
+        duplicadas: filasDuplicadas,
+        ignoradas: filasIgnoradas
+      }
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error procesando Excel" });
+  }
+};
 
 
 module.exports = {
@@ -411,7 +540,7 @@ module.exports = {
     consultarIcc,
     agregarIccgral,
     agregarIccGral2,
-    enviarmovimiento
-
+    enviarmovimiento,
+traermovimientos
 
 }
