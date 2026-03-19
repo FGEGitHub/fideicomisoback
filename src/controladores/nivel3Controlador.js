@@ -782,6 +782,7 @@ const traermovimientos = async (req, res) => {
             `SELECT 
         id,
         fecha,
+        fechacarga,
         debito,
         credito,
         descripcion,
