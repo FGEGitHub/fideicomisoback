@@ -121,6 +121,14 @@ function analizarDescripcion(texto, debito = 0, credito = 0) {
 
         // ================= CREDITOS =================
         {
+            test: () => cuit !== null,
+            result: () => ({
+                concepto: "Honorarios Profesionales",
+                categoria_general: "Legales",
+                subcategoria: "Honorarios"
+            })
+        },
+        {
             test: () => tipo_operacion === "Crédito" && texto.includes("TRANSFERENCIA"),
             result: () => ({
                 concepto: "Transferencia de fondos",
