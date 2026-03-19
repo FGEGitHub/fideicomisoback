@@ -102,8 +102,17 @@ function analizarDescripcion(texto, debito = 0, credito = 0) {
     // =========================
     // TIPO OPERACION
     // =========================
-    if (credito > 0) tipo_operacion = "Crédito";
-    else if (debito > 0) tipo_operacion = "Débito";
+// 🔥 REGLA FUERTE (PRIORIDAD TOTAL)
+if (credito > 0 && debito === 0) {
+    tipo_operacion = "Crédito";
+} else if (debito > 0 && credito === 0) {
+    tipo_operacion = "Débito";
+} else if (credito > 0 && debito > 0) {
+    // caso raro (error de datos)
+    tipo_operacion = credito >= debito ? "Crédito" : "Débito";
+} else {
+    tipo_operacion = null;
+}
 
     // =========================
     // PROYECTO
@@ -118,10 +127,28 @@ function analizarDescripcion(texto, debito = 0, credito = 0) {
     // =========================================================
 
     const reglas = [
-
+// 🔥 CUITS ESPECÍFICOS (PRIORIDAD MÁXIMA)
+{
+    test: () => cuit === "30709110078",
+    result: () => ({
+        concepto: "Impuestos- DGR",
+        categoria_general: "Impuestos",
+        subcategoria: "DGR"
+    })
+},
+{
+    test: () => cuit === "33693450239",
+    result: () => ({
+        concepto: "Impuestos - AFIP",
+        categoria_general: "Impuestos",
+        subcategoria: "AFIP"
+    })
+},
         // ================= CREDITOS =================
         {
-            test: () => cuit !== null,
+            test: () =>
+    cuit !== null &&
+    !["30709110078", "33693450239"].includes(cuit),
             result: () => ({
                 concepto: "Honorarios Profesionales",
                 categoria_general: "Legales",
