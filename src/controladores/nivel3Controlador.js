@@ -783,6 +783,12 @@ const traermovimientos = async (req, res) => {
         id,
         fecha,
         fechacarga,
+        tipo_operacion,
+        categoria_general,
+        subcategoria,
+        proyecto,
+        tipo_gasto,
+
         debito,
         credito,
         descripcion,
