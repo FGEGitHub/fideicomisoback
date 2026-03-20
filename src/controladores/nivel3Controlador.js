@@ -6,6 +6,27 @@ const XLSX = require('xlsx')
 const passport = require('passport')
 const agregaricc = require('../routes/funciones/agregaricc')
 
+
+async function obtenerZonaPorCuit(cuit) {
+    if (!cuit) return null;
+
+    const [rows] = await pool.query(
+        `SELECT zona 
+         FROM clientes 
+         WHERE REPLACE(cuil_cuit, '-', '') = ?`,
+        [cuit]
+    );
+
+    if (!rows.length) return null;
+
+    // puede haber varias zonas
+    const zonas = rows.map(r => (r.zona || "").toUpperCase());
+
+    return zonas;
+}
+
+
+
 function limpiarNumero(valor) {
     if (!valor) return 0;
 
@@ -71,6 +92,126 @@ function extraerCuitYNombre(texto) {
 
 }
 
+
+const reglas = [
+
+  // ================= 1. CUIT (PRIORIDAD MÁXIMA)
+  {
+    test: () => cuit && CUIT_MAP[cuit],
+    result: () => CUIT_MAP[cuit]
+  },
+
+  // ================= 2. IMPUESTOS POR TEXTO
+  {
+    test: () => texto.includes("RETENCION ING. BRUTOS"),
+    result: () => ({
+      concepto: "Impuestos- DGR",
+      categoria_general: "Impuestos",
+      subcategoria: "DGR"
+    })
+  },
+  {
+    test: () => texto.includes("IVA") || texto.includes("25413"),
+    result: () => ({
+      concepto: "Impuestos - AFIP",
+      categoria_general: "Impuestos",
+      subcategoria: "AFIP"
+    })
+  },
+
+  // ================= 3. TRANSFERENCIAS
+  {
+    test: () => texto.includes("TRANSFERENCIA") || texto.includes("TRF"),
+    result: () => ({
+      concepto: "Transferencias",
+      categoria_general: "Transferencias",
+      subcategoria: "Bancarias"
+    })
+  },
+
+  // ================= 4. BANCARIO
+  {
+    test: () => texto.includes("COMISION"),
+    result: () => ({
+      concepto: "Gastos y Comisiones Bancarias",
+      categoria_general: "Bancarios",
+      subcategoria: "Comisiones"
+    })
+  },
+
+  // ================= 5. SEGURIDAD
+  {
+    test: () => razon_social.includes("POLICIA"),
+    result: () => ({
+      concepto: "Servicio de Seguridad - Adicional de Policias",
+      categoria_general: "Seguridad",
+      subcategoria: "Policial"
+    })
+  },
+  {
+    test: () => razon_social.includes("SEGUR"),
+    result: () => ({
+      concepto: "Servicios de Seguridad",
+      categoria_general: "Seguridad",
+      subcategoria: "Privada"
+    })
+  },
+
+  // ================= 6. COMBUSTIBLE
+  {
+    test: () => texto.includes("COMBUSTIBLE"),
+    result: () => ({
+      concepto: "Combustibles",
+      categoria_general: "Operativos",
+      subcategoria: "Combustible"
+    })
+  },
+
+  // ================= 7. RODADOS
+  {
+    test: () => razon_social.match(/(AUTO|MOTOR|VEHIC|RODAD)/),
+    result: () => ({
+      concepto: "Reparación y mantenimiento Rodados",
+      categoria_general: "Operativos",
+      subcategoria: "Vehículos"
+    })
+  },
+
+  // ================= 8. HONORARIOS (IMPORTANTE: ABAJO)
+  {
+    test: () =>
+      cuit !== null,
+    result: () => ({
+      concepto: "Honorarios Profesionales",
+      categoria_general: "Legales",
+      subcategoria: "Honorarios"
+    })
+  },
+
+  // ================= 9. INGRESOS GENERALES
+  {
+    test: () => tipo_operacion === "Crédito",
+    result: () => ({
+      concepto: "Otros Ingresos",
+      categoria_general: "Ingresos",
+      subcategoria: "Otros"
+    })
+  },
+
+  // ================= 10. DEFAULT
+  {
+    test: () => true,
+    result: () => ({
+      concepto: "Otros Egresos",
+      categoria_general: "Otros",
+      subcategoria: "Otros"
+    })
+  }
+
+];
+
+
+
 // =========================
 // 🔧 ANALISIS COMPLETO
 // =========================
@@ -127,6 +268,29 @@ if (credito > 0 && debito === 0) {
     // =========================================================
 
     const reglas = [
+        {
+    test: () =>
+        texto.includes("RETENCION") &&
+        texto.includes("ING") &&
+        texto.includes("BRUTOS"),
+    result: () => ({
+        concepto: "Impuestos- DGR",
+        categoria_general: "Impuestos",
+        subcategoria: "DGR"
+    })
+},
+
+// 🔴 LEY 25413 (IMPUESTO AL CHEQUE / AFIP)
+{
+    test: () =>
+        texto.includes("25413") ||
+        texto.includes("IMP.LEY 25413"),
+    result: () => ({
+        concepto: "Impuestos - AFIP",
+        categoria_general: "Impuestos",
+        subcategoria: "AFIP"
+    })
+},
 // 🔥 CUITS ESPECÍFICOS (PRIORIDAD MÁXIMA)
 {
     test: () => cuit === "30709110078",
@@ -370,6 +534,8 @@ function obtenerFechaArgentina() {
 
 
 const subirexceldemovimientos = async (req, res) => {
+    let cacheClientes = {}; // 🔥 cache en memoria
+
     try {
 
         if (!req.file) {
@@ -380,46 +546,136 @@ const subirexceldemovimientos = async (req, res) => {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(sheet, {
             defval: "",
-            raw: false   // 🔥 ESTO ES CLAVE
+            raw: false
         });
 
         let insertados = 0;
         let duplicados = 0;
 
+        // =========================================================
+        // 🔥 1. PRE-CARGAR TODOS LOS CUIT (OPTIMIZACIÓN PRO)
+        // =========================================================
+
+        const cuitSet = new Set();
+
+        for (const fila of data) {
+            const descripcion = fila["DESCRIPCION"] || "";
+            if (!descripcion) continue;
+
+            const debito = limpiarNumero(fila["DEBITO EN $"]);
+            const credito = limpiarNumero(fila["CREDITO EN $"]);
+
+            if (debito === 0 && credito === 0) continue;
+
+            const analisis = analizarDescripcion(descripcion, debito, credito);
+
+            if (analisis.cuit) {
+                cuitSet.add(analisis.cuit);
+            }
+        }
+
+        const cuitArray = Array.from(cuitSet);
+
+        // 🔥 TRAER TODOS LOS CLIENTES DE UNA
+        if (cuitArray.length > 0) {
+
+            const placeholders = cuitArray.map(() => "?").join(",");
+
+            const rows = await pool.query(
+                `SELECT REPLACE(cuil_cuit, '-', '') as cuit, zona
+                 FROM clientes
+                 WHERE REPLACE(cuil_cuit, '-', '') IN (${placeholders})`,
+                cuitArray
+            );
+
+            // 🔥 ARMAR CACHE
+            for (const row of rows) {
+                const cuit = row.cuit;
+                const zona = (row.zona || "").toUpperCase();
+
+                if (!cacheClientes[cuit]) {
+                    cacheClientes[cuit] = [];
+                }
+
+                cacheClientes[cuit].push(zona);
+            }
+        }
+
+        // =========================================================
+        // 🔥 2. PROCESAR FILAS
+        // =========================================================
+
         for (const fila of data) {
 
             const descripcion = fila["DESCRIPCION"] || "";
-
             if (!descripcion || descripcion.toLowerCase().trim() === "ver") continue;
 
-            /* ---------------- FECHA FIX ---------------- */
-
             const fechaRaw = String(fila["FECHA"] || "");
-            const debitoRaw = String(fila["DEBITO EN $"] || "");
-            const creditoRaw = String(fila["CREDITO EN $"] || "");
-            const debito = limpiarNumero(debitoRaw);
-            const credito = limpiarNumero(creditoRaw);
+            const debito = limpiarNumero(fila["DEBITO EN $"]);
+            const credito = limpiarNumero(fila["CREDITO EN $"]);
             const fecha = parseFecha(fechaRaw);
             if (!fecha) continue;
 
             const fechaCarga = obtenerFechaArgentina();
 
-            /* ---------------- MONTOS ---------------- */
-
-
             if (debito === 0 && credito === 0) continue;
-
-            /* ---------------- ANALISIS ---------------- */
 
             const analisis = analizarDescripcion(descripcion, debito, credito);
 
-            /* ---------------- DUPLICADOS ---------------- */
+            // =========================================================
+            // 🔥 3. LOGICA DE COBRANZAS POR ZONA
+            // =========================================================
+
+            if (analisis.cuit && analisis.tipo_operacion === "Crédito") {
+
+                const zonas = cacheClientes[analisis.cuit];
+
+                if (!zonas) {
+                    analisis.concepto = "No encontrado";
+                } else {
+
+                    const tieneIC3 = zonas.some(z =>
+                        z.includes("CORRIENTES") || z.includes("IC3")
+                    );
+
+                    const tienePIT = zonas.some(z =>
+                        z.includes("PIT")
+                    );
+
+                    if (tienePIT) {
+                        // 🔥 PRIORIDAD PIT
+                        analisis.concepto = "Cobranzas SC - Parque Industrial";
+                        analisis.categoria_general = "Ingresos";
+                        analisis.subcategoria = "Cobranzas";
+                        analisis.proyecto = "PIT";
+
+                    } else if (tieneIC3) {
+                        analisis.concepto = "Cobranzas SC - Fracción IC3";
+                        analisis.categoria_general = "Ingresos";
+                        analisis.subcategoria = "Cobranzas";
+                        analisis.proyecto = "IC3";
+
+                    } else {
+                        analisis.concepto = "No encontrado";
+                    }
+                }
+            }
+
+            // =========================================================
+            // 🔥 4. DUPLICADOS
+            // =========================================================
 
             const existe = await pool.query(
                 `SELECT id FROM movimientos 
-                 WHERE fecha = ? AND debito = ? AND credito = ? AND descripcion = ?
+                 WHERE fecha = ?
+                 AND cuil_cuit = ?
+                 AND (
+                    (debito > 0 AND debito = ?)
+                    OR
+                    (credito > 0 AND credito = ?)
+                 )
                  LIMIT 1`,
-                [fecha, debito, credito, descripcion]
+                [fecha, analisis.cuit, debito, credito]
             );
 
             if (existe.length > 0) {
@@ -427,7 +683,9 @@ const subirexceldemovimientos = async (req, res) => {
                 continue;
             }
 
-            /* ---------------- INSERT ---------------- */
+            // =========================================================
+            // 🔥 5. INSERT
+            // =========================================================
 
             await pool.query(
                 `INSERT INTO movimientos
@@ -453,6 +711,11 @@ const subirexceldemovimientos = async (req, res) => {
             insertados++;
         }
 
+        // =========================================================
+        // 🔥 6. LIBERAR MEMORIA
+        // =========================================================
+        cacheClientes = null;
+
         res.json({
             mensaje: "Importación finalizada",
             total: data.length,
@@ -462,6 +725,10 @@ const subirexceldemovimientos = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+
+        // 🔥 liberar memoria en error también
+        cacheClientes = null;
+
         res.status(500).json({ error: "Error procesando Excel" });
     }
 };
