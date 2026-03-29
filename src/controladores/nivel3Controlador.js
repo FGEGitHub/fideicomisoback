@@ -7,32 +7,6 @@ const passport = require('passport')
 const agregaricc = require('../routes/funciones/agregaricc')
 
 
-async function obtenerZonaPorCuit(cuit) {
-    if (!cuit) return null;
-
-    const [rows] = await pool.query(
-        `SELECT zona 
-         FROM clientes 
-         WHERE REPLACE(cuil_cuit, '-', '') = ?`,
-        [cuit]
-    );
-
-    if (!rows.length) return null;
-
-    // puede haber varias zonas
-    const zonas = rows.map(r => (r.zona || "").toUpperCase());
-
-    return zonas;
-}
-
-function normalizarCuit(cuit) {
-    if (!cuit) return null;
-
-    return cuit
-        .toString()
-        .replace(/\D/g, "") // 🔥 elimina TODO lo que no sea número
-        .trim();
-}
 
 function limpiarNumero(valor) {
     if (!valor) return 0;
@@ -363,6 +337,16 @@ if (credito > 0 && debito === 0) {
         subcategoria: "AFIP"
     })
 },
+
+{
+    test: () => cuit === "30714664928",
+    result: () => ({
+        concepto: "Combustible",
+        categoria_general: "Gastos",
+        subcategoria: "Combustible"
+    })
+},
+
         // ================= CREDITOS =================
         {
             test: () =>
@@ -589,10 +573,9 @@ function obtenerFechaArgentina() {
 
 
 const subirexceldemovimientos = async (req, res) => {
-    let cacheClientes = {}; // 🔥 cache en memoria
+    let cacheClientes = {};
 
     try {
-
         if (!req.file) {
             return res.status(400).json({ error: "No se envió archivo" });
         }
@@ -606,9 +589,33 @@ const subirexceldemovimientos = async (req, res) => {
 
         let insertados = 0;
         let duplicados = 0;
+        let duplicadosDetalle = [];
+
+        const clavesExcel = new Set();
+        const clavesBD = new Set();
 
         // =========================================================
-        // 🔥 1. PRE-CARGAR TODOS LOS CUIT (OPTIMIZACIÓN PRO)
+        // 🔥 1. TRAER EXISTENTES DE BD
+        // =========================================================
+
+        const rowsExistentes = await pool.query(`
+            SELECT 
+                fecha,
+                REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') as cuit,
+                CASE 
+                    WHEN debito > 0 THEN debito
+                    ELSE credito
+                END as monto
+            FROM movimientos
+        `);
+
+        for (const row of rowsExistentes) {
+            const clave = `${row.fecha}_${row.cuit}_${row.monto}`;
+            clavesBD.add(clave);
+        }
+
+        // =========================================================
+        // 🔥 2. PRE-CARGAR CUITS
         // =========================================================
 
         const cuitSet = new Set();
@@ -631,18 +638,16 @@ const subirexceldemovimientos = async (req, res) => {
 
         const cuitArray = Array.from(cuitSet);
 
-        // 🔥 TRAER TODOS LOS CLIENTES DE UNA
         if (cuitArray.length > 0) {
-
             const placeholders = cuitArray.map(() => "?").join(",");
-const rows = await pool.query(
-    `SELECT REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') as cuit, zona
-     FROM clientes
-     WHERE REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') IN (${placeholders})`,
-    cuitArray
-);
 
-            // 🔥 ARMAR CACHE
+            const rows = await pool.query(
+                `SELECT REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') as cuit, zona
+                 FROM clientes
+                 WHERE REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') IN (${placeholders})`,
+                cuitArray
+            );
+
             for (const row of rows) {
                 const cuit = row.cuit;
                 const zona = (row.zona || "").toUpperCase();
@@ -656,7 +661,7 @@ const rows = await pool.query(
         }
 
         // =========================================================
-        // 🔥 2. PROCESAR FILAS
+        // 🔥 3. PROCESAR FILAS
         // =========================================================
 
         for (const fila of data) {
@@ -668,16 +673,51 @@ const rows = await pool.query(
             const debito = limpiarNumero(fila["DEBITO EN $"]);
             const credito = limpiarNumero(fila["CREDITO EN $"]);
             const fecha = parseFecha(fechaRaw);
+
             if (!fecha) continue;
+            if (debito === 0 && credito === 0) continue;
 
             const fechaCarga = obtenerFechaArgentina();
 
-            if (debito === 0 && credito === 0) continue;
-
             const analisis = analizarDescripcion(descripcion, debito, credito);
 
+            const monto = debito > 0 ? debito : credito;
+            const clave = `${fecha}_${analisis.cuit}_${monto}`;
+
+            // 🔴 DUPLICADO EN EXCEL
+            if (clavesExcel.has(clave)) {
+                duplicados++;
+
+                duplicadosDetalle.push({
+                    tipo: "EXCEL",
+                    fecha,
+                    cuit: analisis.cuit,
+                    monto,
+                    descripcion
+                });
+
+                continue;
+            }
+
+            clavesExcel.add(clave);
+
+            // 🔴 DUPLICADO EN BD
+            if (clavesBD.has(clave)) {
+                duplicados++;
+
+                duplicadosDetalle.push({
+                    tipo: "BD",
+                    fecha,
+                    cuit: analisis.cuit,
+                    monto,
+                    descripcion
+                });
+
+                continue;
+            }
+
             // =========================================================
-            // 🔥 3. LOGICA DE COBRANZAS POR ZONA
+            // 🔥 LOGICA DE COBRANZAS
             // =========================================================
 
             if (analisis.cuit && analisis.tipo_operacion === "Crédito") {
@@ -691,13 +731,12 @@ const rows = await pool.query(
                     const tieneIC3 = zonas.some(z =>
                         z.includes("CORRIENTES") || z.includes("IC3")
                     );
-                  
+
                     const tienePIT = zonas.some(z =>
                         z.includes("PIT")
                     );
 
                     if (tienePIT) {
-                        // 🔥 PRIORIDAD PIT
                         analisis.concepto = "Cobranzas SC - Parque Industrial";
                         analisis.categoria_general = "Ingresos";
                         analisis.subcategoria = "Cobranzas";
@@ -716,29 +755,7 @@ const rows = await pool.query(
             }
 
             // =========================================================
-            // 🔥 4. DUPLICADOS
-            // =========================================================
-
-            const existe = await pool.query(
-                `SELECT id FROM movimientos 
-                 WHERE fecha = ?
-                 AND cuil_cuit = ?
-                 AND (
-                    (debito > 0 AND debito = ?)
-                    OR
-                    (credito > 0 AND credito = ?)
-                 )
-                 LIMIT 1`,
-                [fecha, analisis.cuit, debito, credito]
-            );
-
-            if (existe.length > 0) {
-                duplicados++;
-                continue;
-            }
-
-            // =========================================================
-            // 🔥 5. INSERT
+            // 🔥 INSERT
             // =========================================================
 
             await pool.query(
@@ -766,21 +783,25 @@ const rows = await pool.query(
         }
 
         // =========================================================
-        // 🔥 6. LIBERAR MEMORIA
+        // 🔥 LOG DUPLICADOS
         // =========================================================
+
+        console.log("======== DUPLICADOS DETECTADOS ========");
+        console.log(`Total duplicados: ${duplicados}`);
+        console.table(duplicadosDetalle);
+
         cacheClientes = null;
 
         res.json({
             mensaje: "Importación finalizada",
             total: data.length,
             insertados,
-            duplicados
+            duplicados,
+            duplicados_detalle: duplicadosDetalle
         });
 
     } catch (error) {
         console.error(error);
-
-        // 🔥 liberar memoria en error también
         cacheClientes = null;
 
         res.status(500).json({ error: "Error procesando Excel" });
