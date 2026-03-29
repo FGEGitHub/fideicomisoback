@@ -25,7 +25,14 @@ async function obtenerZonaPorCuit(cuit) {
     return zonas;
 }
 
+function normalizarCuit(cuit) {
+    if (!cuit) return null;
 
+    return cuit
+        .toString()
+        .replace(/\D/g, "") // 🔥 elimina TODO lo que no sea número
+        .trim();
+}
 
 function limpiarNumero(valor) {
     if (!valor) return 0;
@@ -292,6 +299,54 @@ if (credito > 0 && debito === 0) {
     })
 },
 // 🔥 CUITS ESPECÍFICOS (PRIORIDAD MÁXIMA)
+{
+    test: () => cuit === "20319698656",
+    result: () => ({
+        concepto: "Seguridad - Empresa de Seguridad",
+        categoria_general: "Seguridad",
+        subcategoria: "Empresa de Seguridad"
+    })
+},
+{
+    test: () => cuit === "30608517290",
+    result: () => ({
+        concepto: "Reintegro de sueldos y movilidad",
+        categoria_general: "Ingresos",
+        subcategoria: "Reintegros"
+    })
+},
+{
+    test: () => cuit === "23249084239",
+    result: () => ({
+        concepto: "Otros Egresos",
+        categoria_general: "Otros",
+        subcategoria: "Otros"
+    })
+},
+{
+    test: () => cuit === "20182958620",
+    result: () => ({
+        concepto: "Alquiler de casa",
+        categoria_general: "Gastos",
+        subcategoria: "Alquiler"
+    })
+},
+{
+    test: () => cuit === "30669726712",
+    result: () => ({
+        concepto: "Seguridad - Adicional de Policias",
+        categoria_general: "Seguridad",
+        subcategoria: "Policial"
+    })
+},
+{
+    test: () => cuit === "30718348044",
+    result: () => ({
+        concepto: "Expensas SC",
+        categoria_general: "Gastos",
+        subcategoria: "Expensas"
+    })
+},
 {
     test: () => cuit === "30709110078",
     result: () => ({
@@ -580,13 +635,12 @@ const subirexceldemovimientos = async (req, res) => {
         if (cuitArray.length > 0) {
 
             const placeholders = cuitArray.map(() => "?").join(",");
-
-            const rows = await pool.query(
-                `SELECT REPLACE(cuil_cuit, '-', '') as cuit, zona
-                 FROM clientes
-                 WHERE REPLACE(cuil_cuit, '-', '') IN (${placeholders})`,
-                cuitArray
-            );
+const rows = await pool.query(
+    `SELECT REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') as cuit, zona
+     FROM clientes
+     WHERE REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') IN (${placeholders})`,
+    cuitArray
+);
 
             // 🔥 ARMAR CACHE
             for (const row of rows) {
@@ -637,7 +691,7 @@ const subirexceldemovimientos = async (req, res) => {
                     const tieneIC3 = zonas.some(z =>
                         z.includes("CORRIENTES") || z.includes("IC3")
                     );
-
+                  
                     const tienePIT = zonas.some(z =>
                         z.includes("PIT")
                     );
