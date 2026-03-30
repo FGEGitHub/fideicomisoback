@@ -602,6 +602,7 @@ const subirexceldemovimientos = async (req, res) => {
             SELECT 
                 fecha,
                 REGEXP_REPLACE(cuil_cuit, '[^0-9]', '') as cuit,
+                   saldo,
                 CASE 
                     WHEN debito > 0 THEN debito
                     ELSE credito
@@ -609,10 +610,10 @@ const subirexceldemovimientos = async (req, res) => {
             FROM movimientos
         `);
 
-        for (const row of rowsExistentes) {
-            const clave = `${row.fecha}_${row.cuit}_${row.monto}`;
-            clavesBD.add(clave);
-        }
+for (const row of rowsExistentes) {
+  const clave = `${row.fecha}_${row.cuit}_${Number(row.monto || 0)}_${Number(row.saldo || 0)}`;
+    clavesBD.add(clave);
+}
 
         // =========================================================
         // 🔥 2. PRE-CARGAR CUITS
@@ -626,7 +627,7 @@ const subirexceldemovimientos = async (req, res) => {
 
             const debito = limpiarNumero(fila["DEBITO EN $"]);
             const credito = limpiarNumero(fila["CREDITO EN $"]);
-
+    const saldo = limpiarNumero(fila["SALDO EN $"]);
             if (debito === 0 && credito === 0) continue;
 
             const analisis = analizarDescripcion(descripcion, debito, credito);
@@ -672,6 +673,8 @@ const subirexceldemovimientos = async (req, res) => {
             const fechaRaw = String(fila["FECHA"] || "");
             const debito = limpiarNumero(fila["DEBITO EN $"]);
             const credito = limpiarNumero(fila["CREDITO EN $"]);
+            const saldo = limpiarNumero(fila["SALDO EN $"]);
+
             const fecha = parseFecha(fechaRaw);
 
             if (!fecha) continue;
@@ -682,7 +685,7 @@ const subirexceldemovimientos = async (req, res) => {
             const analisis = analizarDescripcion(descripcion, debito, credito);
 
             const monto = debito > 0 ? debito : credito;
-            const clave = `${fecha}_${analisis.cuit}_${monto}`;
+       const clave = `${fecha}_${analisis.cuit}_${monto}_${saldo}`;
 
             // 🔴 DUPLICADO EN EXCEL
             if (clavesExcel.has(clave)) {
@@ -693,6 +696,7 @@ const subirexceldemovimientos = async (req, res) => {
                     fecha,
                     cuit: analisis.cuit,
                     monto,
+                       saldo,
                     descripcion
                 });
 
@@ -710,6 +714,7 @@ const subirexceldemovimientos = async (req, res) => {
                     fecha,
                     cuit: analisis.cuit,
                     monto,
+                        saldo,
                     descripcion
                 });
 
@@ -758,26 +763,27 @@ const subirexceldemovimientos = async (req, res) => {
             // 🔥 INSERT
             // =========================================================
 
-            await pool.query(
-                `INSERT INTO movimientos
-                (fecha, fechacarga, debito, credito, descripcion, cuil_cuit, nombre_razon, concepto, tipo_operacion, categoria_general, subcategoria, proyecto, tipo_gasto)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    fecha,
-                    fechaCarga,
-                    debito,
-                    credito,
-                    descripcion,
-                    analisis.cuit,
-                    analisis.razon_social,
-                    analisis.concepto,
-                    analisis.tipo_operacion,
-                    analisis.categoria_general,
-                    analisis.subcategoria,
-                    analisis.proyecto,
-                    analisis.tipo_gasto
-                ]
-            );
+           await pool.query(
+    `INSERT INTO movimientos
+    (fecha, fechacarga, debito, credito, saldo, descripcion, cuil_cuit, nombre_razon, concepto, tipo_operacion, categoria_general, subcategoria, proyecto, tipo_gasto)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+    [
+        fecha,
+        fechaCarga,
+        debito,
+        credito,
+        saldo,
+        descripcion,
+        analisis.cuit,
+        analisis.razon_social,
+        analisis.concepto,
+        analisis.tipo_operacion,
+        analisis.categoria_general,
+        analisis.subcategoria,
+        analisis.proyecto,
+        analisis.tipo_gasto
+    ]
+);
 
             insertados++;
         }
@@ -1165,7 +1171,7 @@ const traermovimientos = async (req, res) => {
         subcategoria,
         proyecto,
         tipo_gasto,
-
+saldo,
         debito,
         credito,
         descripcion,
