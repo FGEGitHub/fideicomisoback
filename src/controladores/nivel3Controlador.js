@@ -532,10 +532,12 @@ if (credito > 0 && debito === 0) {
     }
 if (subcategoria === "DGR") {
     cuit = "30709110078";
+    razon_social="DGR"
 }
 
 if (subcategoria === "AFIP") {
     cuit = "33693450239";
+    razon_social="ARCA"
 }
     return {
         cuit,
