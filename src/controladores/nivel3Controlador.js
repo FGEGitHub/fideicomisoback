@@ -6,23 +6,62 @@ const XLSX = require('xlsx')
 const passport = require('passport')
 const agregaricc = require('../routes/funciones/agregaricc')
 
-
-
 function limpiarNumero(valor) {
-    if (!valor) return 0;
+    if (valor === null || valor === undefined || valor === "") return 0;
 
-    const limpio = valor
-        .toString()
-        .trim()
-        .replace(/\$/g, "")
-        .replace(/\s/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".");
+    // si ya es número real
+    if (typeof valor === "number") {
+        return Number.isFinite(valor) ? valor : 0;
+    }
 
-    const num = Number(limpio);
+    let str = valor.toString().trim();
+
+    // limpiar símbolos
+    str = str.replace(/\$/g, "").replace(/\s/g, "");
+
+    const lastComma = str.lastIndexOf(",");
+    const lastDot = str.lastIndexOf(".");
+
+    // 🔥 CASO 1: ambos existen → decidir por el ÚLTIMO (decimal real)
+    if (lastComma !== -1 && lastDot !== -1) {
+        if (lastDot > lastComma) {
+            // formato inglés → 70,000.50
+            str = str.replace(/,/g, "");
+        } else {
+            // formato latino → 70.000,50
+            str = str.replace(/\./g, "").replace(",", ".");
+        }
+    }
+
+    // 🔥 CASO 2: solo coma
+    else if (lastComma !== -1) {
+        const decimales = str.length - lastComma - 1;
+
+        if (decimales === 3) {
+            // 70,000 → miles
+            str = str.replace(/,/g, "");
+        } else {
+            // 70,50 → decimal
+            str = str.replace(",", ".");
+        }
+    }
+
+    // 🔥 CASO 3: solo punto
+    else if (lastDot !== -1) {
+        const decimales = str.length - lastDot - 1;
+
+        if (decimales === 3) {
+            // 70.000 → miles
+            str = str.replace(/\./g, "");
+        }
+        // si no → decimal válido (70.50)
+    }
+
+    const num = Number(str);
 
     return Number.isFinite(num) ? num : 0;
 }
+
 function extraerCuitYNombre(texto) {
 
     let cuit = null;
@@ -525,27 +564,43 @@ function parseFecha(fecha) {
     }
 
     // 📌 DD/MM/YYYY
-    if (fecha.includes("/")) {
-        const partes = fecha.split("/");
+ // 📌 DD/MM/YYYY (FORZADO ARGENTINA)
+// 📌 FORZAR FORMATO BANCO (MM/DD → DD/MM)
+if (fecha.includes("/")) {
+    const partes = fecha.split("/");
 
-        if (partes.length === 3) {
-            let [dia, mes, anio] = partes;
+    if (partes.length === 3) {
+        let [p1, p2, p3] = partes;
 
-            // arregla año corto
-            if (anio.length === 2) {
-                anio = "20" + anio;
-            }
+        let mes = p1;
+        let dia = p2;
+        let anio = p3;
 
-            return `${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+        if (anio.length === 2) {
+            anio = "20" + anio;
         }
+
+        // 🔥 INVERTIMOS SIEMPRE
+        return `${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
     }
+}
 
     // 📌 YYYY-MM-DD
-    if (fecha.includes("-")) {
-        const partes = fecha.split("-");
+  // 📌 FORMATO CON GUIONES
+// 📌 DD/MM/YYYY (FORZADO SIEMPRE)
+if (fecha.includes("/")) {
+    const partes = fecha.split("/");
 
-        if (partes[0].length === 4) return fecha;
+    if (partes.length === 3) {
+        let [dia, mes, anio] = partes;
+
+        if (anio.length === 2) {
+            anio = "20" + anio;
+        }
+
+        return `${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
     }
+}
 
     return null;
 }
@@ -672,11 +727,12 @@ for (const row of rowsExistentes) {
 
             const fechaRaw = String(fila["FECHA"] || "");
             const debito = limpiarNumero(fila["DEBITO EN $"]);
+            
             const credito = limpiarNumero(fila["CREDITO EN $"]);
             const saldo = limpiarNumero(fila["SALDO EN $"]);
 
             const fecha = parseFecha(fechaRaw);
-
+            console.log(fila["FECHA"], String(fila["FECHA"] || ""), fecha);
             if (!fecha) continue;
             if (debito === 0 && credito === 0) continue;
 
@@ -715,7 +771,8 @@ for (const row of rowsExistentes) {
                     cuit: analisis.cuit,
                     monto,
                         saldo,
-                    descripcion
+                    descripcion,
+                    
                 });
 
                 continue;
