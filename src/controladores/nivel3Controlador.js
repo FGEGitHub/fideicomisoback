@@ -530,7 +530,13 @@ if (credito > 0 && debito === 0) {
             break;
         }
     }
+if (subcategoria === "DGR") {
+    cuit = "30709110078";
+}
 
+if (subcategoria === "AFIP") {
+    cuit = "33693450239";
+}
     return {
         cuit,
         razon_social,
@@ -732,7 +738,6 @@ for (const row of rowsExistentes) {
             const saldo = limpiarNumero(fila["SALDO EN $"]);
 
             const fecha = parseFecha(fechaRaw);
-            console.log(fila["FECHA"], String(fila["FECHA"] || ""), fecha);
             if (!fecha) continue;
             if (debito === 0 && credito === 0) continue;
 
