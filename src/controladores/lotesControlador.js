@@ -19,6 +19,7 @@ const loteCliente = async (req, res) => {
             l.manzana, 
             l.lote, 
             l.parcela, 
+            l.valor_total,
             CASE WHEN c.id_lote IS NOT NULL THEN 'Si' ELSE 'No' END AS tiene_cuotas
         FROM lotes l
         LEFT JOIN cuotas c ON l.id = c.id_lote

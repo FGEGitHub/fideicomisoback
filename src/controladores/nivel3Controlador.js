@@ -138,7 +138,30 @@ const reglas = [
       subcategoria: "AFIP"
     })
   },
-
+{
+    test: () => cuit === "27217344471" && tipo_operacion === "Crédito",
+    result: () => ({
+        concepto: "Reintegro Impuesto de Sellos",
+        categoria_general: "Ingresos",
+        subcategoria: "Reintegros"
+    })
+},
+{
+    test: () => cuit === "27217344471" && tipo_operacion === "Débito",
+    result: () => ({
+        concepto: "Honorarios Profesionales",
+        categoria_general: "Legales",
+        subcategoria: "Honorarios"
+    })
+},
+{
+    test: () => cuit === "30584152474",
+    result: () => ({
+        concepto: "Transferencia de fondo Municipal",
+        categoria_general: "Transferencias",
+        subcategoria: "Municipal"
+    })
+},
   // ================= 3. TRANSFERENCIAS
   {
     test: () => texto.includes("TRANSFERENCIA") || texto.includes("TRF"),
