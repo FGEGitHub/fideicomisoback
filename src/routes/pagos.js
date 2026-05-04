@@ -560,6 +560,47 @@ router.post("/detallesPagocli", isLoggedInn2, async (req, res) => {
 
 router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
   try {
+    const {
+      desde_mes,
+      desde_anio,
+      hasta_mes,
+      hasta_anio,
+      tipo_fecha, // "pago" o "cuota"
+    } = req.query;
+
+    // ============================
+    // ARMAR RANGO
+    // ============================
+    let filtroNormal = "";
+    let filtroIC3 = "";
+
+    if (tipo_fecha === "cuota") {
+      // 🔥 FILTRO POR CUOTA (mes/anio)
+      filtroNormal = `
+        AND (sel.anio * 100 + sel.mes) BETWEEN (${desde_anio} * 100 + ${desde_mes})
+        AND (${hasta_anio} * 100 + ${hasta_mes})
+      `;
+
+      filtroIC3 = `
+        AND (q.anio * 100 + q.mes) BETWEEN (${desde_anio} * 100 + ${desde_mes})
+        AND (${hasta_anio} * 100 + ${hasta_mes})
+      `;
+    } else {
+      // 🔥 FILTRO POR FECHA DE PAGO
+      filtroNormal = `
+        AND DATE(p.fecha) BETWEEN '${desde_anio}-${desde_mes}-01'
+        AND LAST_DAY('${hasta_anio}-${hasta_mes}-01')
+      `;
+
+      filtroIC3 = `
+        AND DATE(pi.fecha) BETWEEN '${desde_anio}-${desde_mes}-01'
+        AND LAST_DAY('${hasta_anio}-${hasta_mes}-01')
+      `;
+    }
+
+    // ============================
+    // QUERY COMPLETA
+    // ============================
     const pagos = await pool.query(`
       
       SELECT
@@ -580,6 +621,7 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
       LEFT JOIN cuotas sel ON p.id_cuota = sel.id
       LEFT JOIN clientes c ON sel.cuil_cuit = c.cuil_cuit
       WHERE c.zona <> 'IC3'
+      ${filtroNormal}
 
       UNION ALL
 
@@ -601,6 +643,7 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
       JOIN cuotas_ic3 q ON pi.id_cuota = q.id
       JOIN clientes c2 ON q.id_cliente = c2.id
       WHERE c2.zona = 'IC3'
+      ${filtroIC3}
 
       ORDER BY anio DESC, mes DESC;
     `);
@@ -611,7 +654,6 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
     res.status(500).json({ error: "Error al obtener los pagos" });
   }
 });
-
 
 ///////// Cantidad inusuales 
 router.get("/cantidadinusuales", isLoggedInn3, async (req, res) => {
