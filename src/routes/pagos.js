@@ -568,14 +568,12 @@ router.get("/todoslospagos", isLoggedInn2, async (req, res) => {
       tipo_fecha, // "pago" o "cuota"
     } = req.query;
 
-    // ============================
-    // ARMAR RANGO
-    // ============================
+
     let filtroNormal = "";
     let filtroIC3 = "";
 
     if (tipo_fecha === "cuota") {
-      // 🔥 FILTRO POR CUOTA (mes/anio)
+      
       filtroNormal = `
         AND (sel.anio * 100 + sel.mes) BETWEEN (${desde_anio} * 100 + ${desde_mes})
         AND (${hasta_anio} * 100 + ${hasta_mes})
