@@ -944,7 +944,179 @@ const mofificarmconcepto = async (req, res) => {
     }
 };
 
+const traeringresos = async (req, res) => {
 
+  try {
+
+    const historial = await pool.query(`
+      SELECT *
+      FROM movimientos
+      WHERE tipo_operacion = "Crédito"
+      ORDER BY fecha DESC
+    `);
+
+    // =====================================================
+    // PRINCIPALES INGRESOS
+    // =====================================================
+
+    const conceptosMap = {};
+
+    historial.forEach((mov) => {
+
+      const concepto =
+        mov.concepto || "Sin concepto";
+
+      const monto =
+        Number(mov.credito) || 0;
+
+      if (!conceptosMap[concepto]) {
+
+        conceptosMap[concepto] = 0;
+
+      }
+
+      conceptosMap[concepto] += monto;
+
+    });
+
+    const principalesIngresos =
+      Object.entries(conceptosMap)
+        .map(([concepto, monto]) => ({
+          concepto,
+          monto
+        }))
+        .sort((a, b) => b.monto - a.monto)
+        .slice(0, 10);
+
+    // =====================================================
+    // INGRESOS POR MES
+    // =====================================================
+
+    const ingresosPorMesMap = {};
+
+    historial.forEach((mov) => {
+
+      const fecha =
+        new Date(mov.fecha);
+
+      const mes =
+        String(fecha.getMonth() + 1)
+          .padStart(2, "0");
+
+      const anio =
+        fecha.getFullYear();
+
+      const key =
+        `${mes}-${anio}`;
+
+      if (!ingresosPorMesMap[key]) {
+
+        ingresosPorMesMap[key] = 0;
+
+      }
+
+      ingresosPorMesMap[key] +=
+        Number(mov.credito) || 0;
+
+    });
+
+    const ingresosPorMes =
+      Object.entries(ingresosPorMesMap)
+        .map(([mes, total]) => ({
+          mes,
+          total
+        }))
+        .sort((a, b) => {
+
+          const [mesA, anioA] =
+            a.mes.split("-");
+
+          const [mesB, anioB] =
+            b.mes.split("-");
+
+          return (
+            new Date(`${anioA}-${mesA}-01`) -
+            new Date(`${anioB}-${mesB}-01`)
+          );
+
+        });
+
+    // =====================================================
+    // INGRESOS POR DIA
+    // =====================================================
+
+    const ingresosPorDiaMap = {};
+
+    historial.forEach((mov) => {
+
+      const fecha = mov.fecha;
+
+      if (!ingresosPorDiaMap[fecha]) {
+
+        ingresosPorDiaMap[fecha] = 0;
+
+      }
+
+      ingresosPorDiaMap[fecha] +=
+        Number(mov.credito) || 0;
+
+    });
+
+    const ingresosPorDia =
+      Object.entries(ingresosPorDiaMap)
+        .map(([fecha, total]) => ({
+          fecha,
+          total
+        }))
+        .sort(
+          (a, b) =>
+            new Date(a.fecha) -
+            new Date(b.fecha)
+        );
+
+    // =====================================================
+    // TOTAL GENERAL
+    // =====================================================
+
+    const totalIngresos =
+      historial.reduce((acc, mov) => {
+
+        return (
+          acc +
+          (Number(mov.credito) || 0)
+        );
+
+      }, 0);
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    res.json({
+
+      totalIngresos,
+
+      principalesIngresos,
+
+      ingresosPorMes,
+
+      ingresosPorDia,
+
+      movimientos: historial
+
+    });
+
+  } catch (error) {
+
+    console.log(error);
+
+    res.status(500).json({
+      error: "Error al obtener ingresos"
+    });
+
+  }
+
+};
 
 const historialIcc = async (req, res) => {
 
@@ -1294,6 +1466,6 @@ module.exports = {
     agregarIccGral2,
     enviarmovimiento,
     traermovimientos,
-    mofificarmconcepto
-
+    mofificarmconcepto,
+traeringresos
 }

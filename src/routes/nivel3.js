@@ -7,7 +7,7 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport= require('passport')
 const agregaricc = require('./funciones/agregaricc')
-const {mofificarmconcepto, traermovimientos, subirexceldemovimientos , enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2 } = require('../controladores/nivel3Controlador')
+const {mofificarmconcepto, traermovimientos, subirexceldemovimientos , enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2, traeringresos } = require('../controladores/nivel3Controlador')
 const multer = require("multer");
 router.post('/signupp', isLoggedInn3, passport.authenticate('local.signupnivel3', {
     successRedirect: '/exitosignup',
@@ -60,6 +60,7 @@ router.post('/enviarmovimiento', enviarmovimiento)
 router.post('/mofificarmconcepto', mofificarmconcepto)
 
 
+router.get('/traeringresos', traeringresos)
 
 
 router.post("/subirexceldemovimientos", upload.single("file"), subirexceldemovimientos);
