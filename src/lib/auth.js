@@ -1,130 +1,236 @@
 const jwt = require("jsonwebtoken")
-const {hashf} =require (('../keys.js'))
+const { hashf } = require('../keys.js')
+
 module.exports = {
-    //Decofidicacion de token Logueado
-    isLoggedInn(req,res, next){
-        const authorization = req.get('authorization') ///
-        let token =null
 
-        if (authorization && authorization.startsWith('Bearer')){
-            
-            token = authorization.substring(7) ////  Bearer  length
-            
+    // Decodificacion de token Logueado
+    isLoggedInn(req, res, next) {
+
+        const authorization = req.get('authorization')
+
+        let token = null
+
+        // IMPORTANTE EL ESPACIO
+        if (
+            authorization &&
+            authorization.startsWith('Bearer ')
+        ) {
+
+            token = authorization.substring(7)
+
         }
+
+        // SI NO HAY TOKEN
+        if (!token) {
+
+            console.log("TOKEN VACIO")
+
+            return res.send('error login')
+        }
+
         let decodedToken = {}
-        
-        try{
-   
-           
-             decodedToken = jwt.verify(token,hashf.key )
-            
-        }catch(error){
-           //
+
+        try {
+
+            decodedToken = jwt.verify(
+                token,
+                hashf.key
+            )
+
+        } catch (error) {
+
+            console.log("error", error)
+
+            return res.send('error login')
+        }
+
+        if (!decodedToken.id) {
+
+            return res.send('error login')
+        }
+
+        next()
+    },
+
+
+
+    // Decodificacion Token y verificacion nivel 2
+    isLoggedInn2(req, res, next) {
+
+        const authorization = req.get('authorization')
+
+        let token = null
+
+        if (
+            authorization &&
+            authorization.startsWith('Bearer ')
+        ) {
+
+            token = authorization.substring(7)
+
+        }
+
+        if (!token) {
+
+            console.log("TOKEN VACIO NIVEL 2")
+
+            return res.send('error login')
+        }
+
+        let decodedToken = {}
+
+        try {
+
+            decodedToken = jwt.verify(
+                token,
+                hashf.key
+            )
+
+        } catch (error) {
+
             console.log(error)
+
+            return res.send('error login')
         }
-      
-        if (!token || !decodedToken.id){
-            res.send('error login')
-            
-        }else{ next()}
-      
-       // res.send(decodedToken.cuil_cuit)
+
+        if (
+            !decodedToken.id ||
+            decodedToken.nivel < 2
+        ) {
+
+            return res.send('error login')
+        }
+
+        next()
     },
 
-    ///decodificacion Token y verificacion nivel 2
-    isLoggedInn2(req,res, next){
-      
-        //
-        
+
+
+    // Decodificacion nivel 3
+    isLoggedInn3(req, res, next) {
+
         const authorization = req.get('authorization')
-        let token =null
-     
-        if (authorization && authorization.startsWith('Bearer')){
-          
-            token = authorization.substring(7) 
+
+        let token = null
+
+        if (
+            authorization &&
+            authorization.startsWith('Bearer ')
+        ) {
+
+            token = authorization.substring(7)
+
         }
-        let decodedToken = {}
-    
-        try{
-             decodedToken = jwt.verify(token, hashf.key)
-           
-        }catch{}
-      
-        if (!token || !decodedToken.id || (decodedToken.nivel <2) ){
-            
+
+        if (!token) {
+
+            console.log("TOKEN VACIO NIVEL 3")
+
             return res.send('error login')
         }
-      
-       // res.send(decodedToken.cuil_cuit)
-        
-        next()
-    },
-    /////Decodificacion nibel 3
-    isLoggedInn3(req,res, next){
-       
-        //
-        const authorization = req.get('authorization')
-        let token =null
-       
-        if (authorization && authorization.startsWith('Bearer')){
-           
-            token = authorization.substring(7) 
-        }
+
         let decodedToken = {}
-        
-        try{
-             decodedToken = jwt.verify(token, hashf.key)
-             
-           
-        }catch{}
-      
-        if (!token || !decodedToken.id || (decodedToken.nivel <3) ){
+
+        try {
+
+            decodedToken = jwt.verify(
+                token,
+                hashf.key
+            )
+
+        } catch (error) {
+
+            console.log(error)
+
             return res.send('error login')
         }
-      
-       // res.send(decodedToken.cuil_cuit)
-        
-        next()
-    },
-    isLoggedInn4(req,res, next){
-    
-        //
-        const authorization = req.get('authorization')
-        let token =null
-        if (authorization && authorization.startsWith('Bearer')){
-            token = authorization.substring(7) 
-        }
-        let decodedToken = {}
-        
-        try{
-             decodedToken = jwt.verify(token, hashf.key)
-             
-           
-        }catch(error){
-          
-        }
-      
-        if (!token || !decodedToken.id || (decodedToken.nivel <4) ){
+
+        if (
+            !decodedToken.id ||
+            decodedToken.nivel < 3
+        ) {
+
             return res.send('error login')
         }
-      
-       // res.send(decodedToken.cuil_cuit)
-        
+
         next()
     },
-/// Veridicacion token con handlebars
-    isLoggedIn(req,res, next){
-        if (req.isAuthenticated()) {     /// isathenticated metodo de pasport
-            return next()   //si existe esta seccion continua con el codigo
+
+
+
+    // Decodificacion nivel 4
+    isLoggedInn4(req, res, next) {
+
+        const authorization = req.get('authorization')
+
+        let token = null
+
+        if (
+            authorization &&
+            authorization.startsWith('Bearer ')
+        ) {
+
+            token = authorization.substring(7)
+
         }
-        return res.redirect('/signin') //si no esta logueado 
+
+        if (!token) {
+
+   
+
+            return res.send('error login')
+        }
+
+        let decodedToken = {}
+
+        try {
+
+            decodedToken = jwt.verify(
+                token,
+                hashf.key
+            )
+
+        } catch (error) {
+
+            console.log(error)
+
+            return res.send('error login')
+        }
+
+        if (
+            !decodedToken.id ||
+            decodedToken.nivel < 4
+        ) {
+
+            return res.send('error login')
+        }
+
+        next()
     },
-    isNotLoggedIn(req,res, next){
-        if (!req.isAuthenticated()) {    
+
+
+
+    // Verificacion token con handlebars
+    isLoggedIn(req, res, next) {
+
+        if (req.isAuthenticated()) {
+
             return next()
-    }
-    return res.redirect('/profile')
+        }
 
+        return res.redirect('/signin')
+    },
+
+
+
+    isNotLoggedIn(req, res, next) {
+
+        if (!req.isAuthenticated()) {
+
+            return next()
+        }
+
+        return res.redirect('/profile')
     }
 
 }

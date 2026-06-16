@@ -777,14 +777,7 @@ const deudores = async (req, res) => {
   try {
 
     // ====== 1) DETALLE POR CLIENTE ======
-const detalle = await pool.query(`
-
-SELECT * FROM (
-
-/* =======================================================
-   ====== CLIENTES ZONA PIT
-   ======================================================= */
-SELECT 
+const detalle = await pool.query(`SELECT 
     c.id,
     c.nombre,
     c.cuil_cuit,
@@ -882,117 +875,6 @@ LEFT JOIN (
 
 WHERE c.zona = 'PIT'
 HAVING debe > 0
-
-
-/* =======================================================
-   ====== CLIENTES RESTO DE ZONAS (IC3)
-   ======================================================= */
-UNION ALL
-
-SELECT
-    c.id,
-    c.nombre,
-    c.cuil_cuit,
-    c.zona,
-    NULL AS id_lote,
-
-    SUM(
-      CASE 
-        WHEN d.diferencia > 1 
-       
-         AND (ci.compensada = 'No' OR ci.compensada IS NULL)
-        THEN 1 ELSE 0 
-      END
-    ) AS debe,
-
-    SUM(
-      CASE 
-        WHEN NOT (
-          d.diferencia > 1 
-         
-          AND (ci.compensada = 'No' OR ci.compensada IS NULL)
-        )
-        THEN 1 ELSE 0 
-      END
-    ) AS pagadas,
-
-    COUNT(*) AS total,
-    COUNT(*) AS total_cuotas,
-
-    SUM(
-      CASE 
-        WHEN NOT (
-         ajuste is null
-        )
-        THEN 1 ELSE 0 
-      END
-    ) AS liquidadas,
-
-    SUM(ci.cuota_con_ajuste) AS total_devengado,
-    SUM(ci.pagado) AS pagado,
-
-    COALESCE(MAX(q2.cuotasquedebe), JSON_ARRAY()) AS cuotasquedebe
-
-FROM clientes c
-
-JOIN (
-    SELECT 
-        ci.id,
-        ci.id_cliente,
-        ci.mes,
-        ci.anio,
-        ci.cuota_con_ajuste,
-        ci.ajuste,
-        ci.compensada,
-        COALESCE(SUM(pi.monto),0) AS pagado
-    FROM cuotas_ic3 ci
-    LEFT JOIN pagos_ic3 pi ON ci.id = pi.id_cuota
-    WHERE NOT (ci.mes = MONTH(CURDATE()) AND ci.anio = YEAR(CURDATE()))
-    GROUP BY ci.id
-) ci ON c.id = ci.id_cliente
-
-JOIN (
-   SELECT 
-     ci2.id,
-     (ci2.cuota_con_ajuste - COALESCE(SUM(pi2.monto),0)) AS diferencia
-   FROM cuotas_ic3 ci2
-   LEFT JOIN pagos_ic3 pi2 ON ci2.id = pi2.id_cuota
-   WHERE NOT (ci2.mes = MONTH(CURDATE()) AND ci2.anio = YEAR(CURDATE()))
-   GROUP BY ci2.id
-) d ON ci.id = d.id
-
-LEFT JOIN (
-    SELECT
-        t.id_cliente,
-        JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'fecha', CONCAT(LPAD(t.mes,2,'0'),'/',t.anio),
-              'monto', ABS(t.diferencia)
-            )
-        ) AS cuotasquedebe
-    FROM (
-        SELECT
-            ci3.id_cliente,
-            ci3.mes,
-            ci3.anio,
-            (ci3.cuota_con_ajuste - COALESCE(SUM(pi3.monto),0)) AS diferencia,
-            ci3.compensada
-        FROM cuotas_ic3 ci3
-        LEFT JOIN pagos_ic3 pi3 ON ci3.id = pi3.id_cuota
-        WHERE NOT (ci3.mes = MONTH(CURDATE()) AND ci3.anio = YEAR(CURDATE()))
-        GROUP BY ci3.id
-    ) t
-    WHERE t.diferencia > 0
-      
-      AND (t.compensada = 'No' OR t.compensada IS NULL)
-    GROUP BY t.id_cliente
-) q2 ON c.id = q2.id_cliente
-
-WHERE c.zona <> 'PIT' OR c.id = 10000603
-GROUP BY c.id, c.nombre, c.cuil_cuit, c.zona
-HAVING debe > 0
-
-) AS resultado
 
 ORDER BY debe DESC;
 

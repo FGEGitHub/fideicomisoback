@@ -106,19 +106,35 @@ router.get('/noexitorecupero', (req, res) => {
 
 
 /////////////jwt prueba
-router.post('/signinn', passport.authenticate('local.signin', { failureRedirect: '/login' }),
-    function (req, res) {
-     
-        const userFoRToken = {
-            id: req.user.id,
-            cuil_cuit: req.user.cuil_cuit,
-            nivel: req.user.nivel,
+router.post(
+  '/signinn',
+  passport.authenticate('local.signin', {
+    failureRedirect: '/login'
+  }),
+  function (req, res) {
 
-        }
+    console.log("ENTRO AL LOGIN");
 
-      const token = jwt.sign(userFoRToken, 'fideicomisocs121', { expiresIn: 60 * 60 * 24 * 7 })
-       // const token = jwt.sign(userFoRToken, 'fideicomisocs121', { expiresIn:    1* 60})
-  
+    const userFoRToken = {
+      id: req.user.id,
+      cuil_cuit: req.user.cuil_cuit,
+      nivel: req.user.nivel,
+      razon: req.user.razon
+    };
+
+    const token = jwt.sign(
+      userFoRToken,
+      'fideicomisocs121',
+      { expiresIn: 60 * 60 * 24 * 7 }
+    );
+
+   
+
+    /* res.json({
+      token,
+      user: req.user
+    }); */
+
         res.send({
             id: req.user.id,
             cuil_cuit: req.user.cuil_cuit,
@@ -127,8 +143,10 @@ router.post('/signinn', passport.authenticate('local.signin', { failureRedirect:
             razon: req.user.razon,
 
         })
-    }
 
+
+
+  }
 );
 /////////////////
 
