@@ -51,5 +51,9 @@ const aux = '%'+cuil_cuit+'%'
 
 
 
+
+router.get('/enviar', async (req, res) => {
+
+})
 module.exports = router
 

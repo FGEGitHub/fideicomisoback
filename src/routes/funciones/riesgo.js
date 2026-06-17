@@ -66,7 +66,7 @@ async function matriz(cliente) {
     if (cliente['pep_extranjero'] === 'Si' || cliente['categoria_especial'] === 'Si') {
         return 100; // Devuelve un riesgo de 100 si es PEP o categoría especial
     }
-
+   
     if (cliente['razon'] === 'Persona') {
         // Persona Física
 

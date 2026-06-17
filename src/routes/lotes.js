@@ -658,14 +658,19 @@ router.post('/guardarpoligonoo', async (req, res) => {
   capa = null,
   subclasificacion = null,
   descripcion = null,
-  privado = null,   // 👈 NUEVO
+  privado = null,
   cuil_cuit = null,
   adrema = null,
   superficie = null,
   nombre = null,
   mensura = null,
+<<<<<<< HEAD
   judicializado,
   vendido
+=======
+  judicializado = null,
+  vendido = null,
+>>>>>>> f92139f4ef35e4afb4c6c8743198da11da1cc398
 } = req.body;
 console.log("Datos recibidos para guardar polígono:")
 console.log(req.body)
@@ -709,6 +714,10 @@ console.log(req.body)
       addIfValid("superficie", superficie);
       addIfValid("nombre", nombre);
       addIfValid("mensura", mensura);
+      if (vendido !== null && vendido !== undefined) {
+        updates.push(`vendido = ?`);
+        values.push(vendido ? 1 : 0);
+      }
 
       if (updates.length > 0) {
         values.push(id_mapa);
@@ -729,7 +738,7 @@ console.log(req.body)
       // INSERT
       // ===============================
       await pool.query(
-        `INSERT INTO poligonos 
+        `INSERT INTO poligonos
         (
           id_mapa,
           dato1,
@@ -757,9 +766,15 @@ console.log(req.body)
           superficie,
           nombre,
           mensura,
+<<<<<<< HEAD
            judicializado,
           privado,
           vendido
+=======
+          judicializado,
+          privado,
+          vendido ? 1 : 0,
+>>>>>>> f92139f4ef35e4afb4c6c8743198da11da1cc398
         ]
       );
 
