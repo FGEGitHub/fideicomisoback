@@ -664,7 +664,8 @@ router.post('/guardarpoligonoo', async (req, res) => {
   superficie = null,
   nombre = null,
   mensura = null,
-  judicializado
+  judicializado,
+  vendido
 } = req.body;
 console.log("Datos recibidos para guardar polígono:")
 console.log(req.body)
@@ -701,6 +702,7 @@ console.log(req.body)
       addIfValid("capa", capa);
       addIfValid("privado", privado); // 👈 NUEVO
      addIfValid("judicializado", judicializado); // 👈 NUEVO
+     addIfValid("vendido", vendido); // 👈 NUEVO
       // Campos nuevos
       addIfValid("cuil_cuit", cuil_cuit);
       addIfValid("adrema", adrema);
@@ -740,9 +742,10 @@ console.log(req.body)
           nombre,
           mensura,
           judicializado,
-          privado
+          privado,
+          vendido
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id_mapa,
           dato1,
@@ -755,7 +758,8 @@ console.log(req.body)
           nombre,
           mensura,
            judicializado,
-          privado
+          privado,
+          vendido
         ]
       );
 
