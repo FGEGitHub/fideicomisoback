@@ -658,72 +658,139 @@ try {
 // Función principal
 const busquedarenapet = async () => {
   try {
-    const clientes = await pool.query('SELECT * FROM clientes');
-    
+    // Función para obtener fecha en formato dd/mm/aaaa hh:mm
+    const obtenerFechaActual = () => {
+      const ahora = new Date();
+
+      const dia = String(ahora.getDate()).padStart(2, "0");
+      const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+      const anio = ahora.getFullYear();
+
+      const horas = String(ahora.getHours()).padStart(2, "0");
+      const minutos = String(ahora.getMinutes()).padStart(2, "0");
+
+      return `${dia}/${mes}/${anio} ${horas}:${minutos}`;
+    };
+
+    const clientes = await pool.query("SELECT * FROM clientes");
+
     if (!clientes.length) {
-      console.log('No se encontraron clientes en la base de datos.');
-      return { mensaje: 'No se encontraron clientes en la base de datos.', clientesAnalizados: 0 };
+      console.log("No se encontraron clientes en la base de datos.");
+      return {
+        mensaje: "No se encontraron clientes en la base de datos.",
+        clientesAnalizados: 0,
+      };
     }
 
-    const url = 'https://repet.jus.gob.ar/';
-    const httpsAgent = new https.Agent({ rejectUnauthorized: false }); // ⚠️ solución
+    const url = "https://repet.jus.gob.ar/";
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false,
+    });
+
     const response = await axios.get(url, { httpsAgent });
 
     const html = response.data;
     const $ = cheerio.load(html);
 
-    const pageText = removeAccents($('body').text());
-    const lines = pageText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const pageText = removeAccents($("body").text());
+    const lines = pageText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
 
     const allResults = [];
-    
+    const fechaConsulta = obtenerFechaActual();
+
     for (const obj of clientes) {
-      const nombresAAnalizar = [obj?.Nombre, obj?.beneficiario1, obj?.beneficiario2, obj?.beneficiario3]
-        .filter(nombre => nombre && typeof nombre === 'string' && nombre !== 'No');
+      let tieneCoincidencias = false;
+
+      const nombresAAnalizar = [
+        obj?.Nombre,
+        obj?.beneficiario1,
+        obj?.beneficiario2,
+        obj?.beneficiario3,
+      ].filter(
+        (nombre) =>
+          nombre &&
+          typeof nombre === "string" &&
+          nombre.trim() !== "" &&
+          nombre !== "No"
+      );
 
       for (const nombre of nombresAAnalizar) {
-        const palabras = nombre.split(' ')
-          .map(word => removeAccents(word.trim()))
-          .filter(word => word.length > 0);
+        const palabras = nombre
+          .split(" ")
+          .map((word) => removeAccents(word.trim()))
+          .filter((word) => word.length > 0);
 
         if (palabras.length === 0) continue;
 
-        const regexPalabras = palabras.map(palabra => new RegExp(`\\b${escapeRegExp(palabra)}\\b`, 'i'));
+        const regexPalabras = palabras.map(
+          (palabra) =>
+            new RegExp(`\\b${escapeRegExp(palabra)}\\b`, "i")
+        );
 
-        const matchedLines = lines.filter(line =>
-          regexPalabras.every(regex => regex.test(line))
+        const matchedLines = lines.filter((line) =>
+          regexPalabras.every((regex) => regex.test(line))
         );
 
         if (matchedLines.length > 0) {
+          tieneCoincidencias = true;
+
           allResults.push({
+            cliente: obj.Nombre,
             Nombre: nombre,
             resultados: matchedLines,
           });
-          
-          if (nombre !== obj?.Nombre) {
-            console.log(`Coincidencias encontradas para beneficiario: ${nombre}`);
+
+          if (nombre !== obj.Nombre) {
+            console.log(
+              `Coincidencias encontradas para beneficiario: ${nombre}`
+            );
           }
         }
       }
+
+      // Actualizar el cliente con el resultado y la fecha
+      await pool.query(
+        `
+        UPDATE clientes
+        SET repet = ?, fecha_repet = ?
+        WHERE id = ?
+        `,
+        [
+          tieneCoincidencias
+            ? "Con coincidencias"
+            : "Sin coincidencias",
+          fechaConsulta,
+          obj.id,
+        ]
+      );
     }
 
     if (allResults.length > 0) {
-      console.log('Resultados encontrados:', allResults);
+      console.log("Resultados encontrados:", allResults);
     } else {
-      console.log('No se encontraron coincidencias.');
+      console.log("No se encontraron coincidencias.");
     }
 
-    return { resultados: allResults, clientesAnalizados: clientes.length };
+    return {
+      resultados: allResults,
+      clientesAnalizados: clientes.length,
+    };
   } catch (error) {
-    console.error('Error en la búsqueda:', error);
-    return { error: 'Error durante la búsqueda', clientesAnalizados: 0 };
+    console.error("Error en la búsqueda:", error);
+
+    return {
+      error: "Error durante la búsqueda",
+      clientesAnalizados: 0,
+    };
   }
 };
 
 
-
 // Configurar el cron para ejecutar la función todos los días a las 16:35
-cron.schedule('00 9 * * *', async () => {
+cron.schedule('00 8 * * *', async () => {
   console.log('Iniciando la búsqueda automática a las 9:00...');
 
   const { resultados, clientesAnalizados, mensaje, error } = await busquedarenapet();
