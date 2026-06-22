@@ -114,6 +114,25 @@ res.json(usuarios)
 )
 
 
+router.get("/traerventas2", async (req, res) => {
+  try {
+    const ventas = await pool.query(`
+      SELECT *
+      FROM movimientos2
+      ORDER BY fecha DESC
+    `);
+
+    res.json(ventas);
+  } catch (error) {
+    console.error("Error al traer ventas:", error);
+
+    res.status(500).json({
+      mensaje: "Error al obtener las ventas",
+    });
+  }
+});
+
+
 
 ////menuoruncipal 
 router.get('/traerdatosdetarjetas', isLoggedInn3, async (req, res) => {
