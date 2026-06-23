@@ -118,11 +118,77 @@ res.json(usuarios)
 
 router.get("/traerventas2", async (req, res) => {
   try {
-    const ventas = await pool.query(`
+    const { manzana, lote, mes, busqueda } = req.query;
+
+    let sql = `
       SELECT *
       FROM movimientos2
-      ORDER BY fecha DESC
-    `);
+      WHERE 1 = 1
+    `;
+
+    const parametros = [];
+
+    // Manzana: búsqueda parcial, por ejemplo "8" encuentra "Mza N°8"
+    if (manzana?.trim()) {
+      sql += ` AND LOWER(manzana) LIKE ? `;
+      parametros.push(`%${manzana.trim().toLowerCase()}%`);
+    }
+
+    // Lote: búsqueda parcial
+    if (lote?.trim()) {
+      sql += ` AND LOWER(lote) LIKE ? `;
+      parametros.push(`%${lote.trim().toLowerCase()}%`);
+    }
+
+    /*
+      mes debe venir como: 2024-09
+      fecha en BD viene como: 9/13/2024 (MM/DD/YYYY)
+    */
+    if (mes?.trim()) {
+      sql += `
+        AND DATE_FORMAT(
+          STR_TO_DATE(fecha, '%m/%d/%Y'),
+          '%Y-%m'
+        ) = ?
+      `;
+      parametros.push(mes.trim());
+    }
+
+    /*
+      Buscador general opcional.
+      Esto reemplaza el filtro que hoy hacés en useMemo.
+    */
+    if (busqueda?.trim()) {
+      const texto = `%${busqueda.trim().toLowerCase()}%`;
+
+      sql += `
+        AND (
+          LOWER(COALESCE(manzana, '')) LIKE ?
+          OR LOWER(COALESCE(lote, '')) LIKE ?
+          OR LOWER(COALESCE(tipo, '')) LIKE ?
+          OR LOWER(COALESCE(comprador, '')) LIKE ?
+          OR LOWER(COALESCE(estado, '')) LIKE ?
+          OR LOWER(COALESCE(uso_de_suelo, '')) LIKE ?
+          OR LOWER(COALESCE(plan, '')) LIKE ?
+        )
+      `;
+
+      parametros.push(
+        texto,
+        texto,
+        texto,
+        texto,
+        texto,
+        texto,
+        texto
+      );
+    }
+
+    sql += `
+      ORDER BY STR_TO_DATE(fecha, '%m/%d/%Y') DESC
+    `;
+
+    const ventas = await pool.query(sql, parametros);
 
     res.json(ventas);
   } catch (error) {
@@ -130,10 +196,10 @@ router.get("/traerventas2", async (req, res) => {
 
     res.status(500).json({
       mensaje: "Error al obtener las ventas",
+      detalle: error.message,
     });
   }
 });
-
 
 
 ////menuoruncipal 
