@@ -5,6 +5,20 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport = require('passport')
 const agregaricc = require('../routes/funciones/agregaricc')
+const { promisify } = require("util");
+
+const obtenerConexion = () => {
+  return new Promise((resolve, reject) => {
+    pool.getConnection((error, conexion) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(conexion);
+    });
+  });
+};
 
 function limpiarNumero(valor) {
     if (valor === null || valor === undefined || valor === "") return 0;
@@ -1266,8 +1280,476 @@ const agregarIccgral = async (req, res,) => {
     res.send('Icc asignado con éxito');
 }
 
+const convertirConexionAPromesas = (conexion) => {
+  conexion.query = promisify(conexion.query).bind(conexion);
+  conexion.beginTransaction = promisify(conexion.beginTransaction).bind(conexion);
+  conexion.commit = promisify(conexion.commit).bind(conexion);
+  conexion.rollback = promisify(conexion.rollback).bind(conexion);
+
+  return conexion;
+};
+const convertirNumeroUSD = (valor) => {
+  if (valor === null || valor === undefined || valor === "") {
+    return null;
+  }
+
+  // Si Excel ya lo leyó como número
+  if (typeof valor === "number") {
+    return valor;
+  }
+
+  let texto = String(valor)
+    .replace(/USD/gi, "")
+    .replace(/\$/g, "")
+    .replace(/\s/g, "")
+    .trim();
+
+  /*
+    Casos:
+    $14,500.00  -> 14500.00
+    USD 845,83  -> 845.83
+    USD 14.500  -> 14500
+    USD 0,00    -> 0
+  */
+
+  const tieneComa = texto.includes(",");
+  const tienePunto = texto.includes(".");
+
+  if (tieneComa && tienePunto) {
+    // Si la coma está después del punto: 14.500,00
+    if (texto.lastIndexOf(",") > texto.lastIndexOf(".")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+      // 14,500.00
+      texto = texto.replace(/,/g, "");
+    }
+  } else if (tieneComa) {
+    // 845,83
+    texto = texto.replace(",", ".");
+  } else if (tienePunto) {
+    /*
+      USD 14.500 normalmente es miles, no decimal.
+      Si termina con exactamente 3 dígitos, se toma como miles.
+    */
+    if (/^\d{1,3}(\.\d{3})+$/.test(texto)) {
+      texto = texto.replace(/\./g, "");
+    }
+  }
+
+  const numero = Number(texto);
+
+  return Number.isNaN(numero) ? null : numero;
+};
+
+const convertirFechaExcel = (fecha) => {
+  if (!fecha) return null;
+
+  // Si ya llega como Date desde SheetJS
+  if (fecha instanceof Date && !Number.isNaN(fecha.getTime())) {
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const anio = fecha.getFullYear();
+
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  const texto = String(fecha).trim();
+
+  // Si llega ya como DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
+    return texto;
+  }
+
+  // Si llega como YYYY-MM-DD o YYYY-MM-DDTHH...
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+    const [anio, mes, dia] = texto.substring(0, 10).split("-");
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  return texto;
+};
+
+const limpiarManzanaOLote = (valor) => {
+  if (!valor) return null;
+
+  // Mza N°7 => 7
+  // Parc N°6 => 6
+  return String(valor)
+    .replace(/Mza\s*N°?/gi, "")
+    .replace(/Parc\s*N°?/gi, "")
+    .trim();
+};
 
 
+
+// -------------------------------------------------------
+const limpiarNumeroVentas = (valor) => {
+  if (valor === null || valor === undefined || valor === "") {
+    return null;
+  }
+
+  if (typeof valor === "number") {
+    return valor;
+  }
+
+  let texto = String(valor)
+    .replace(/USD/gi, "")
+    .replace(/\$/g, "")
+    .replace(/\s/g, "")
+    .trim();
+
+  if (!texto) return null;
+
+  const tieneComa = texto.includes(",");
+  const tienePunto = texto.includes(".");
+
+  if (tieneComa && tienePunto) {
+    // 18,214.00
+    if (texto.lastIndexOf(".") > texto.lastIndexOf(",")) {
+      texto = texto.replace(/,/g, "");
+    }
+    // 1.200,00
+    else {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    }
+  } else if (tieneComa) {
+    // 845,83
+    texto = texto.replace(",", ".");
+  } else if (tienePunto) {
+    /*
+      18.214 normalmente es miles.
+      482.1 o 37.78 son decimales.
+    */
+    if (/^\d{1,3}(\.\d{3})+$/.test(texto)) {
+      texto = texto.replace(/\./g, "");
+    }
+  }
+
+  const numero = Number(texto);
+
+  return Number.isNaN(numero) ? null : numero;
+};
+
+// -------------------------------------------------------
+// Mza N°4 => 4
+// Parc N°7 => 7
+// Si ya viene 4 o 7, queda igual.
+// -------------------------------------------------------
+const limpiarManzanaLote = (valor) => {
+  if (valor === null || valor === undefined || valor === "") {
+    return null;
+  }
+
+  return String(valor)
+    .replace(/Mza\s*N[°ºo]?/gi, "")
+    .replace(/Parc\s*N[°ºo]?/gi, "")
+    .replace(/Manzana/gi, "")
+    .replace(/Lote/gi, "")
+    .trim();
+};
+
+// -------------------------------------------------------
+// Devuelve DD/MM/YYYY
+// -------------------------------------------------------
+const convertirFechaVentas = (valor) => {
+  if (!valor) return null;
+
+  // Fecha JS
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    const dia = String(valor.getDate()).padStart(2, "0");
+    const mes = String(valor.getMonth() + 1).padStart(2, "0");
+    const anio = valor.getFullYear();
+
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  const texto = String(valor).trim();
+
+  // Ya está bien: 01/10/2024
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
+    return texto;
+  }
+
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+    const [anio, mes, dia] = texto.substring(0, 10).split("-");
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  return texto;
+};
+
+// Busca una clave aunque Excel tenga salto de línea, espacios o comillas.
+const obtenerValorColumna = (fila, nombreBuscado) => {
+  const normalizar = (texto) =>
+    String(texto || "")
+      .replace(/\n/g, " ")
+      .replace(/\r/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/"/g, "")
+      .trim()
+      .toLowerCase();
+
+  const buscado = normalizar(nombreBuscado);
+
+  const claveEncontrada = Object.keys(fila).find(
+    (clave) => normalizar(clave) === buscado
+  );
+
+  return claveEncontrada ? fila[claveEncontrada] : "";
+};
+
+const subirexceldemovimientos2 = async (req, res) => {
+  let conexion;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        error: "No se envió archivo Excel",
+      });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, {
+      type: "buffer",
+      cellDates: true,
+    });
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    /*
+      header: 1 permite leer todas las filas como arrays.
+      Así buscamos la fila que contiene "Manzana",
+      aunque antes haya filas vacías, títulos o logos.
+    */
+    const filasCrudas = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+      dateNF: "dd/mm/yyyy",
+    });
+
+    const indiceEncabezado = filasCrudas.findIndex((fila) => {
+      return fila.some((celda) =>
+        String(celda || "").trim().toLowerCase() === "manzana"
+      );
+    });
+
+    if (indiceEncabezado === -1) {
+      return res.status(400).json({
+        error:
+          "No se encontró la columna 'Manzana'. Verifique el formato del Excel.",
+      });
+    }
+
+    /*
+      Convertimos desde la fila de encabezados.
+      range empieza desde el índice donde está Manzana.
+    */
+    const data = XLSX.utils.sheet_to_json(sheet, {
+      range: indiceEncabezado,
+      defval: "",
+      raw: false,
+      dateNF: "dd/mm/yyyy",
+    });
+
+    // -------------------------------------------------------
+    // Traer registros existentes para no duplicar
+    // -------------------------------------------------------
+    const existentes = await pool.query(`
+      SELECT manzana, lote, fecha, comprador
+      FROM movimientos2
+    `);
+
+    const clavesBD = new Set();
+
+    for (const fila of existentes) {
+      const clave = [
+        String(fila.manzana || "").trim().toLowerCase(),
+        String(fila.lote || "").trim().toLowerCase(),
+        String(fila.fecha || "").trim(),
+        String(fila.comprador || "").trim().toLowerCase(),
+      ].join("|");
+
+      clavesBD.add(clave);
+    }
+
+    const clavesExcel = new Set();
+
+    let insertados = 0;
+    let duplicados = 0;
+    let omitidos = 0;
+    const duplicadosDetalle = [];
+
+
+    for (const fila of data) {
+      const manzanaOriginal = obtenerValorColumna(fila, "Manzana");
+      const loteOriginal = obtenerValorColumna(fila, "Lote");
+
+      /*
+        Omite:
+        - filas vacías entre quincenas
+        - títulos repetidos
+        - subtítulos
+        - filas sin manzana o lote
+      */
+      if (!manzanaOriginal || !loteOriginal) {
+        omitidos++;
+        continue;
+      }
+
+      if (
+        String(manzanaOriginal).trim().toLowerCase() === "manzana" ||
+        String(loteOriginal).trim().toLowerCase() === "lote"
+      ) {
+        omitidos++;
+        continue;
+      }
+
+      const manzana = limpiarManzanaLote(manzanaOriginal);
+      const lote = limpiarManzanaLote(loteOriginal);
+
+      const fecha = convertirFechaVentas(
+        obtenerValorColumna(fila, "Fecha Venta")
+      );
+
+      const comprador = obtenerValorColumna(fila, "Comprador");
+
+      // Si es una fila separadora de quincena, no entra.
+      if (!manzana || !lote || !fecha) {
+        omitidos++;
+        continue;
+      }
+
+      const clave = [
+        String(manzana).trim().toLowerCase(),
+        String(lote).trim().toLowerCase(),
+        String(fecha).trim(),
+        String(comprador || "").trim().toLowerCase(),
+      ].join("|");
+
+      // Duplicado dentro del mismo Excel
+      if (clavesExcel.has(clave)) {
+        duplicados++;
+
+        duplicadosDetalle.push({
+          tipo: "EXCEL",
+          manzana,
+          lote,
+          fecha,
+          comprador,
+        });
+
+        continue;
+      }
+
+      clavesExcel.add(clave);
+
+      // Duplicado ya existente en la BD
+      if (clavesBD.has(clave)) {
+        duplicados++;
+
+        duplicadosDetalle.push({
+          tipo: "BASE_DE_DATOS",
+          manzana,
+          lote,
+          fecha,
+          comprador,
+        });
+
+        continue;
+      }
+
+      const datos = {
+        manzana,
+        lote,
+        tipo: obtenerValorColumna(fila, "Tipo") || null,
+        fecha,
+        mes_venta:
+          convertirFechaVentas(
+            obtenerValorColumna(fila, "Mes de Venta")
+          ) || null,
+
+        comprador: comprador || null,
+
+        valor: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Valor Total (USD)")
+        ),
+
+        anticipo: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Anticipo (USD)")
+        ),
+
+        m2: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "M2")
+        ),
+
+        valor_pagado_m2: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Valor pagado por M2")
+        ),
+
+        uso_de_suelo:
+          obtenerValorColumna(fila, "Uso de Suelo") || null,
+
+        plan: obtenerValorColumna(fila, "Plan") || null,
+
+        valor_cuota: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Valor Cuota (USD)")
+        ),
+
+        cuotas_pagadas:
+          limpiarNumeroVentas(
+            obtenerValorColumna(fila, "Cuotas Pagas")
+          ) || 0,
+
+        cuotas_pendientes:
+          limpiarNumeroVentas(
+            obtenerValorColumna(fila, "Cuotas Pendientes")
+          ) || 0,
+
+        monto_cobrado: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Monto Cobrado (USD)")
+        ),
+
+        saldo: limpiarNumeroVentas(
+          obtenerValorColumna(fila, "Saldo Pendiente (USD)")
+        ),
+
+        estado: obtenerValorColumna(fila, "Estado") || null,
+      };
+
+  await pool.query(       "INSERT INTO movimientos2 SET ?",    datos     );
+console.log(datos)
+      clavesBD.add(clave);
+      insertados++;
+    }
+
+    //await conexion.commit();
+
+    res.json({
+      mensaje: "Importación de ventas finalizada",
+      total_filas_excel: data.length,
+      insertados,
+      duplicados,
+      omitidos,
+      duplicados_detalle: duplicadosDetalle,
+    });
+  } catch (error) {
+    if (conexion) {
+      await conexion.rollback();
+    }
+
+    console.error("Error procesando Excel de movimientos2:", error);
+
+    res.status(500).json({
+      error: "Error procesando Excel de ventas",
+      detalle: error.message,
+    });
+  } finally {
+    if (conexion) {
+      conexion.release();
+    }
+  }
+};
 
 const enviarmovimiento = async (req, res) => {
 
@@ -1465,6 +1947,7 @@ module.exports = {
     agregarIccgral,
     agregarIccGral2,
     enviarmovimiento,
+    subirexceldemovimientos2,
     traermovimientos,
     mofificarmconcepto,
 traeringresos

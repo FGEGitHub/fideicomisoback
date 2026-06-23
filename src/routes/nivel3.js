@@ -7,7 +7,7 @@ const { isLoggedIn, isLoggedInn3 } = require('../lib/auth') //proteger profile
 const XLSX = require('xlsx')
 const passport= require('passport')
 const agregaricc = require('./funciones/agregaricc')
-const {mofificarmconcepto, traermovimientos, subirexceldemovimientos , enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2, traeringresos } = require('../controladores/nivel3Controlador')
+const {mofificarmconcepto, traermovimientos, subirexceldemovimientos,subirexceldemovimientos2 ,enviarmovimiento2, enviarmovimiento,historialIcc, pagoSi, borrarHistorial, asignarClave, asignarvalormetroc, consultarIcc, agregarIccGral2, traeringresos } = require('../controladores/nivel3Controlador')
 const multer = require("multer");
 router.post('/signupp', isLoggedInn3, passport.authenticate('local.signupnivel3', {
     successRedirect: '/exitosignup',
@@ -54,6 +54,8 @@ router.post('/agregariccgral22', isLoggedInn3,agregarIccGral2)
 
 router.get('/traermovimientos', traermovimientos)
 
+router.post('/enviarmovimiento2', subirexceldemovimientos2)
+
 router.post('/enviarmovimiento', enviarmovimiento)
 
 
@@ -65,7 +67,7 @@ router.get('/traeringresos', traeringresos)
 
 router.post("/subirexceldemovimientos", upload.single("file"), subirexceldemovimientos);
 
-
+router.post("/subirexceldemovimientos2", upload.single("file"), subirexceldemovimientos2);
 
 
 router.post('/agregarunusuario', async (req, res,) => {

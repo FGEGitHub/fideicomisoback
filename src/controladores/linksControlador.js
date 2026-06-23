@@ -892,7 +892,7 @@ ORDER BY debe DESC;
         id: c.id,
         nombre: c.nombre,
         cuil_cuit: c.cuil_cuit,
-zona:c.zona,
+        zona:c.zona,
         total_devengado: Number(c.total_devengado),
         pagado: Number(c.pagado),
 
