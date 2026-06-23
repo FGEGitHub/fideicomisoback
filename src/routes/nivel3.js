@@ -115,7 +115,6 @@ res.json(usuarios)
 
 )
 
-
 router.get("/traerventas2", async (req, res) => {
   try {
     const { manzana, lote, mes, busqueda } = req.query;
@@ -128,22 +127,19 @@ router.get("/traerventas2", async (req, res) => {
 
     const parametros = [];
 
-    // Manzana: búsqueda parcial, por ejemplo "8" encuentra "Mza N°8"
+    // Coincidencia EXACTA: 2 trae solo 2, no 12.
     if (manzana?.trim()) {
-      sql += ` AND LOWER(manzana) LIKE ? `;
-      parametros.push(`%${manzana.trim().toLowerCase()}%`);
+      sql += ` AND TRIM(LOWER(manzana)) = ? `;
+      parametros.push(manzana.trim().toLowerCase());
     }
 
-    // Lote: búsqueda parcial
+    // Coincidencia EXACTA: 2 trae solo lote 2, no lote 12.
     if (lote?.trim()) {
-      sql += ` AND LOWER(lote) LIKE ? `;
-      parametros.push(`%${lote.trim().toLowerCase()}%`);
+      sql += ` AND TRIM(LOWER(lote)) = ? `;
+      parametros.push(lote.trim().toLowerCase());
     }
 
-    /*
-      mes debe venir como: 2024-09
-      fecha en BD viene como: 9/13/2024 (MM/DD/YYYY)
-    */
+    // mes llega como 2024-09
     if (mes?.trim()) {
       sql += `
         AND DATE_FORMAT(
@@ -154,10 +150,7 @@ router.get("/traerventas2", async (req, res) => {
       parametros.push(mes.trim());
     }
 
-    /*
-      Buscador general opcional.
-      Esto reemplaza el filtro que hoy hacés en useMemo.
-    */
+    // Buscador general: acá sí se mantiene LIKE porque es texto libre.
     if (busqueda?.trim()) {
       const texto = `%${busqueda.trim().toLowerCase()}%`;
 
@@ -190,6 +183,8 @@ router.get("/traerventas2", async (req, res) => {
 
     const ventas = await pool.query(sql, parametros);
 
+    console.log("Ventas encontradas:", ventas.length);
+
     res.json(ventas);
   } catch (error) {
     console.error("Error al traer ventas:", error);
@@ -200,7 +195,6 @@ router.get("/traerventas2", async (req, res) => {
     });
   }
 });
-
 
 ////menuoruncipal 
 router.get('/traerdatosdetarjetas', isLoggedInn3, async (req, res) => {
