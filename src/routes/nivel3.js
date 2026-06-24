@@ -117,7 +117,7 @@ res.json(usuarios)
 
 router.get("/traerventas2", async (req, res) => {
   try {
-    const { manzana, lote, mes, busqueda } = req.query;
+    const { manzana, lote, mes, busqueda, vendedor } = req.query;
 
     let sql = `
       SELECT *
@@ -127,19 +127,25 @@ router.get("/traerventas2", async (req, res) => {
 
     const parametros = [];
 
-    // Coincidencia EXACTA: 2 trae solo 2, no 12.
+    // Manzana exacta: 2 trae solamente 2, no 12.
     if (manzana?.trim()) {
       sql += ` AND TRIM(LOWER(manzana)) = ? `;
       parametros.push(manzana.trim().toLowerCase());
     }
 
-    // Coincidencia EXACTA: 2 trae solo lote 2, no lote 12.
+    // Lote exacto: 2 trae solamente 2, no 12.
     if (lote?.trim()) {
       sql += ` AND TRIM(LOWER(lote)) = ? `;
       parametros.push(lote.trim().toLowerCase());
     }
 
-    // mes llega como 2024-09
+    // Vendedor exacto: no importa mayúscula/minúscula.
+    if (vendedor?.trim()) {
+      sql += ` AND TRIM(LOWER(vendedor)) = ? `;
+      parametros.push(vendedor.trim().toLowerCase());
+    }
+
+    // Mes llega como: 2024-09
     if (mes?.trim()) {
       sql += `
         AND DATE_FORMAT(
@@ -150,7 +156,7 @@ router.get("/traerventas2", async (req, res) => {
       parametros.push(mes.trim());
     }
 
-    // Buscador general: acá sí se mantiene LIKE porque es texto libre.
+    // Buscador general: coincidencia parcial.
     if (busqueda?.trim()) {
       const texto = `%${busqueda.trim().toLowerCase()}%`;
 
@@ -163,17 +169,19 @@ router.get("/traerventas2", async (req, res) => {
           OR LOWER(COALESCE(estado, '')) LIKE ?
           OR LOWER(COALESCE(uso_de_suelo, '')) LIKE ?
           OR LOWER(COALESCE(plan, '')) LIKE ?
+          OR LOWER(COALESCE(vendedor, '')) LIKE ?
         )
       `;
 
       parametros.push(
-        texto,
-        texto,
-        texto,
-        texto,
-        texto,
-        texto,
-        texto
+        texto, // manzana
+        texto, // lote
+        texto, // tipo
+        texto, // comprador
+        texto, // estado
+        texto, // uso_de_suelo
+        texto, // plan
+        texto  // vendedor
       );
     }
 
