@@ -777,107 +777,134 @@ const deudores = async (req, res) => {
   try {
 
     // ====== 1) DETALLE POR CLIENTE ======
-const detalle = await pool.query(`SELECT 
+const detalle = await pool.query(`
+  SELECT 
     c.id,
     c.nombre,
     c.cuil_cuit,
     c.zona,
-    f.id_lote,
+    l.id AS id_lote,
 
-    COALESCE(f.debe,0) AS debe,
-    COALESCE(f.pagadas,0) AS pagadas,
-    COALESCE(f.total_final,0) AS total,
+    COALESCE(f.debe, 0) AS debe,
+    COALESCE(f.pagadas, 0) AS pagadas,
+    COALESCE(f.total_final, 0) AS total,
 
-    COALESCE(t.total_cuotas,0) AS total_cuotas,
-    COALESCE(t.liquidadas,0) AS liquidadas,
+    COALESCE(t.total_cuotas, 0) AS total_cuotas,
+    COALESCE(t.liquidadas, 0) AS liquidadas,
 
-    COALESCE(p.total_devengado,0) AS total_devengado,
-    COALESCE(p.pagado,0) AS pagado,
+    COALESCE(p.total_devengado, 0) AS total_devengado,
+    COALESCE(p.pagado, 0) AS pagado,
 
     COALESCE(q.cuotasquedebe, JSON_ARRAY()) AS cuotasquedebe
 
-FROM clientes c
+  FROM clientes c
 
-LEFT JOIN (
+  INNER JOIN lotes l
+    ON c.cuil_cuit = l.cuil_cuit
+
+  LEFT JOIN (
     SELECT 
-      cuil_cuit,
       id_lote,
+
       SUM(
         CASE 
-          WHEN diferencia < 0 
-           AND ABS(diferencia) > 1
-           AND (compensada = 'No' OR compensada IS NULL)
-          THEN 1 ELSE 0 
+          WHEN diferencia < -1
+          
+          THEN 1
+          ELSE 0
         END
       ) AS debe,
 
       SUM(
         CASE 
-          WHEN NOT (
-            diferencia < 0 
-            AND ABS(diferencia) > 1
-            AND (compensada = 'No' OR compensada IS NULL)
+          WHEN  (
+            diferencia > -1
+            
           )
-          THEN 1 ELSE 0 
+          THEN 1
+          ELSE 0
         END
       ) AS pagadas,
 
       COUNT(*) AS total_final
+
     FROM cuotas
     WHERE parcialidad = 'Final'
-      AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
-    GROUP BY cuil_cuit, id_lote
-) f ON c.cuil_cuit = f.cuil_cuit
+      AND NOT (
+        mes = MONTH(CURDATE())
+        AND anio = YEAR(CURDATE())
+      )
+    GROUP BY id_lote
+  ) f ON l.id = f.id_lote
 
-LEFT JOIN (
+  LEFT JOIN (
     SELECT
-      cuil_cuit,
       id_lote,
       COUNT(*) AS total_cuotas,
-      SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
-    FROM cuotas
-    WHERE parcialidad IN ('Final','Original')
-      AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
-    GROUP BY cuil_cuit, id_lote
-) t ON c.cuil_cuit = t.cuil_cuit AND f.id_lote = t.id_lote
 
-LEFT JOIN (
+      SUM(
+        CASE
+          WHEN parcialidad = 'Final'
+         
+          THEN 1
+          ELSE 0
+        END
+      ) AS liquidadas
+
+    FROM cuotas
+    WHERE parcialidad IN ('Final', 'Original')
+      AND NOT (
+        mes = MONTH(CURDATE())
+        AND anio = YEAR(CURDATE())
+      )
+    GROUP BY id_lote
+  ) t ON l.id = t.id_lote
+
+  LEFT JOIN (
     SELECT 
-      cuotas.cuil_cuit,
-      cuotas.id_lote,
-      SUM(cuotas.cuota_con_ajuste) AS total_devengado,
-      COALESCE(SUM(pagos.monto),0) AS pagado
-    FROM cuotas
-    LEFT JOIN pagos ON cuotas.id = pagos.id_cuota
-    WHERE cuotas.parcialidad = 'Final'
-      AND NOT (cuotas.mes = MONTH(CURDATE()) AND cuotas.anio = YEAR(CURDATE()))
-    GROUP BY cuotas.cuil_cuit, cuotas.id_lote
-) p ON c.cuil_cuit = p.cuil_cuit AND f.id_lote = p.id_lote
+      cu.id_lote,
+      SUM(cu.cuota_con_ajuste) AS total_devengado,
+      COALESCE(SUM(pg.monto), 0) AS pagado
 
-LEFT JOIN (
+    FROM cuotas cu
+    LEFT JOIN pagos pg 
+      ON cu.id = pg.id_cuota
+
+    WHERE cu.parcialidad = 'Final'
+      AND NOT (
+        cu.mes = MONTH(CURDATE())
+        AND cu.anio = YEAR(CURDATE())
+      )
+    GROUP BY cu.id_lote
+  ) p ON l.id = p.id_lote
+
+  LEFT JOIN (
     SELECT
-      cuil_cuit,
       id_lote,
+
       JSON_ARRAYAGG(
         JSON_OBJECT(
-          'fecha', CONCAT(LPAD(mes,2,'0'),'/',anio),
-          'monto', ABS(diferencia)
+          'fecha', CONCAT(LPAD(mes, 2, '0'), '/', anio),
+          'monto', diferencia
         )
       ) AS cuotasquedebe
+
     FROM cuotas
     WHERE parcialidad = 'Final'
-      AND diferencia < 0
-      AND ABS(diferencia) > 1
-      AND (compensada = 'No' OR compensada IS NULL)
-      AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
-    GROUP BY cuil_cuit, id_lote
-) q ON c.cuil_cuit = q.cuil_cuit AND f.id_lote = q.id_lote
+      AND diferencia < -1
+    
+      AND NOT (
+        mes = MONTH(CURDATE())
+        AND anio = YEAR(CURDATE())
+      )
+    GROUP BY id_lote
+  ) q ON l.id = q.id_lote
 
-WHERE c.zona = 'PIT'
-HAVING debe > 0
+  WHERE c.zona = 'PIT'
 
-ORDER BY debe DESC;
+  HAVING debe > 0
 
+  ORDER BY debe DESC;
 `);
 
 
