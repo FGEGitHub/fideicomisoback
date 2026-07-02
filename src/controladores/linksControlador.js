@@ -773,142 +773,258 @@ const borrarCbu = async (req, res) => {
     }
 };
  */
+
 const deudores = async (req, res) => {
   try {
+    // ====== 1) DETALLE ORIGINAL: CLIENTES / LOTES NORMALES ======
+    const detalle = await pool.query(`
+      SELECT 
+        c.id,
+        c.nombre,
+        c.cuil_cuit,
+        c.zona,
+        l.id AS id_lote,
 
-    // ====== 1) DETALLE POR CLIENTE ======
-const detalle = await pool.query(`
-  SELECT 
+        COALESCE(f.debe, 0) AS debe,
+        COALESCE(f.pagadas, 0) AS pagadas,
+        COALESCE(f.total_final, 0) AS total,
+
+        COALESCE(t.total_cuotas, 0) AS total_cuotas,
+        COALESCE(t.liquidadas, 0) AS liquidadas,
+
+        COALESCE(p.total_devengado, 0) AS total_devengado,
+        COALESCE(p.pagado, 0) AS pagado,
+
+        COALESCE(q.cuotasquedebe, JSON_ARRAY()) AS cuotasquedebe,
+
+        'normal' AS origen
+
+      FROM clientes c
+
+      INNER JOIN lotes l
+        ON c.cuil_cuit = l.cuil_cuit
+
+      LEFT JOIN (
+        SELECT 
+          id_lote,
+          SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+          COUNT(*) AS total_final
+        FROM cuotas
+        WHERE parcialidad = 'Final'
+         AND compensada = 'No'
+         AND cuota_cancelada = 'No'
+          AND NOT (
+            mes = MONTH(CURDATE())
+            AND anio = YEAR(CURDATE())
+          )
+        GROUP BY id_lote
+      ) f ON l.id = f.id_lote
+
+      LEFT JOIN (
+        SELECT
+          id_lote,
+          COUNT(*) AS total_cuotas,
+          SUM(CASE WHEN parcialidad = 'Final' THEN 1 ELSE 0 END) AS liquidadas
+        FROM cuotas
+        WHERE parcialidad IN ('Final', 'Original')
+         AND compensada = 'No'
+          AND cuota_cancelada = 'No'
+          AND NOT (
+            mes = MONTH(CURDATE())
+            AND anio = YEAR(CURDATE())
+          )
+        GROUP BY id_lote
+      ) t ON l.id = t.id_lote
+
+      LEFT JOIN (
+        SELECT 
+          cu.id_lote,
+          SUM(cu.cuota_con_ajuste) AS total_devengado,
+          COALESCE(SUM(pg.monto), 0) AS pagado
+        FROM cuotas cu
+        LEFT JOIN pagos pg 
+          ON cu.id = pg.id_cuota
+        WHERE cu.parcialidad = 'Final'
+          AND cu.compensada = 'No'
+          AND cuota_cancelada = 'No'
+          AND NOT (
+            cu.mes = MONTH(CURDATE())
+            AND cu.anio = YEAR(CURDATE())
+          )
+        GROUP BY cu.id_lote
+      ) p ON l.id = p.id_lote
+
+      LEFT JOIN (
+        SELECT
+          id_lote,
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'fecha', CONCAT(LPAD(mes, 2, '0'), '/', anio),
+              'monto', diferencia
+            )
+          ) AS cuotasquedebe
+        FROM cuotas
+        WHERE parcialidad = 'Final'
+          AND compensada = 'No'
+           AND cuota_cancelada = 'No'
+          AND diferencia < -1
+          AND NOT (
+            mes = MONTH(CURDATE())
+            AND anio = YEAR(CURDATE())
+          )
+        GROUP BY id_lote
+      ) q ON l.id = q.id_lote
+
+      WHERE c.zona = 'PIT'
+      HAVING debe > 0
+    `);
+
+    // ====== 2) DETALLE IC3 ======
+    // Trae únicamente clientes IC3 que tengan al menos un pago.
+const detalleIC3 = await pool.query(`
+  SELECT
     c.id,
     c.nombre,
     c.cuil_cuit,
     c.zona,
-    l.id AS id_lote,
 
-    COALESCE(f.debe, 0) AS debe,
-    COALESCE(f.pagadas, 0) AS pagadas,
-    COALESCE(f.total_final, 0) AS total,
+    COALESCE(x.liquidadas, 0) AS liquidadas,
+    COALESCE(x.pagadas, 0) AS pagadas,
+    COALESCE(x.debe, 0) AS debe,
 
-    COALESCE(t.total_cuotas, 0) AS total_cuotas,
-    COALESCE(t.liquidadas, 0) AS liquidadas,
+    COALESCE(x.total_devengado, 0) AS total_devengado,
+    COALESCE(x.total_pagado, 0) AS pagado,
 
-    COALESCE(p.total_devengado, 0) AS total_devengado,
-    COALESCE(p.pagado, 0) AS pagado,
+    COALESCE(x.cuotasquedebe, JSON_ARRAY()) AS cuotasquedebe,
 
-    COALESCE(q.cuotasquedebe, JSON_ARRAY()) AS cuotasquedebe
+    'ic3' AS origen
 
   FROM clientes c
 
-  INNER JOIN lotes l
-    ON c.cuil_cuit = l.cuil_cuit
+  INNER JOIN (
+    SELECT
+      cu.id_cliente,
 
-  LEFT JOIN (
-    SELECT 
-      id_lote,
-
-      SUM(
-        CASE 
-          WHEN diferencia < -1
-          
-          THEN 1
-          ELSE 0
-        END
-      ) AS debe,
+      COUNT(cu.id) AS liquidadas,
 
       SUM(
-        CASE 
-          WHEN  (
-            diferencia > -1
-            
-          )
+        CASE
+          WHEN COALESCE(p.total_pagado_cuota, 0) >= cu.cuota_con_ajuste - 1
           THEN 1
           ELSE 0
         END
       ) AS pagadas,
 
-      COUNT(*) AS total_final
-
-    FROM cuotas
-    WHERE parcialidad = 'Final'
-      AND NOT (
-        mes = MONTH(CURDATE())
-        AND anio = YEAR(CURDATE())
-      )
-    GROUP BY id_lote
-  ) f ON l.id = f.id_lote
-
-  LEFT JOIN (
-    SELECT
-      id_lote,
-      COUNT(*) AS total_cuotas,
-
       SUM(
         CASE
-          WHEN parcialidad = 'Final'
-         
+          WHEN COALESCE(p.total_pagado_cuota, 0) < cu.cuota_con_ajuste - 1
           THEN 1
           ELSE 0
         END
-      ) AS liquidadas
+      ) AS debe,
 
-    FROM cuotas
-    WHERE parcialidad IN ('Final', 'Original')
-      AND NOT (
-        mes = MONTH(CURDATE())
-        AND anio = YEAR(CURDATE())
-      )
-    GROUP BY id_lote
-  ) t ON l.id = t.id_lote
-
-  LEFT JOIN (
-    SELECT 
-      cu.id_lote,
       SUM(cu.cuota_con_ajuste) AS total_devengado,
-      COALESCE(SUM(pg.monto), 0) AS pagado
-
-    FROM cuotas cu
-    LEFT JOIN pagos pg 
-      ON cu.id = pg.id_cuota
-
-    WHERE cu.parcialidad = 'Final'
-      AND NOT (
-        cu.mes = MONTH(CURDATE())
-        AND cu.anio = YEAR(CURDATE())
-      )
-    GROUP BY cu.id_lote
-  ) p ON l.id = p.id_lote
-
-  LEFT JOIN (
-    SELECT
-      id_lote,
+      COALESCE(SUM(p.total_pagado_cuota), 0) AS total_pagado,
 
       JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'fecha', CONCAT(LPAD(mes, 2, '0'), '/', anio),
-          'monto', diferencia
-        )
+        CASE
+          WHEN COALESCE(p.total_pagado_cuota, 0) < cu.cuota_con_ajuste - 1
+          THEN JSON_OBJECT(
+            'fecha', CONCAT(LPAD(cu.mes, 2, '0'), '/', cu.anio),
+            'monto', cu.cuota_con_ajuste - COALESCE(p.total_pagado_cuota, 0)
+          )
+          ELSE NULL
+        END
       ) AS cuotasquedebe
 
-    FROM cuotas
-    WHERE parcialidad = 'Final'
-      AND diferencia < -1
-    
-      AND NOT (
-        mes = MONTH(CURDATE())
-        AND anio = YEAR(CURDATE())
-      )
-    GROUP BY id_lote
-  ) q ON l.id = q.id_lote
+    FROM cuotas_ic3 cu
 
-  WHERE c.zona = 'PIT'
+    -- Trae el cliente para poder comparar el CUIL/CUIT.
+    INNER JOIN clientes c_ic3
+      ON c_ic3.id = cu.id_cliente
 
-  HAVING debe > 0
+    LEFT JOIN (
+      SELECT
+        id_cuota,
+        SUM(monto) AS total_pagado_cuota
+      FROM pagos_ic3
+      GROUP BY id_cuota
+    ) p ON p.id_cuota = cu.id
 
-  ORDER BY debe DESC;
+    WHERE NOT (
+      cu.mes = MONTH(CURDATE())
+      AND cu.anio = YEAR(CURDATE())
+    )
+
+    -- SOLO estos clientes se consideran para IC3.
+    AND c_ic3.cuil_cuit IN (
+      '20-29672374-7',
+      '30-70988629-7',
+      '27-24798457-3',
+      '20-26037261-1',
+      '27-34569735-2',
+      '20-27295539-6',
+      '20-34998474-2',
+      '27-36194399-1',
+      '20-29464448-3',
+      '20-26969254-6',
+      '27-33855701-4',
+      '20-31255430-6',
+      '20-30924952-7',
+      '20-31686442-3',
+      '20-34298486-0',
+      '20-33071946-0',
+      '27-36916856-3',
+      '20-34891582-8',
+      '20-37062902-2',
+      '20-17813796-5',
+      '20-23742291-1',
+      '20-32183258-0',
+      '27-30779124-8',
+      '20-28369055-6',
+      '27-30273704-0',
+      '20-23396426-4',
+      '27-23742766-7',
+      '20-12868685-2',
+      '20-32837004-3',
+      '30-71119137-9',
+      '27-34425592-5',
+      '20-25621660-5',
+      '27-92539806-9',
+      '20-23158932-6',
+      '30-63962048-0',
+      '20-32371149-7',
+      '20-38874552-6',
+      '20-17644303-1',
+      '27-23077347-0',
+      '23-28050859-4',
+      '27-13779814-5',
+      '20-12693216-3',
+      '27-32516510-9',
+      '20-34782595-7',
+      '27-31255406-8',
+      '27-23397367-5',
+      '27-33666458-8',
+      '20-22477146-1',
+      '20-35186497-5',
+      '27-31727029-7'
+    )
+
+    GROUP BY cu.id_cliente
+
+    -- Mantiene tu condición actual:
+    -- sólo aparecen quienes hayan realizado al menos un pago IC3.
+    HAVING SUM(COALESCE(p.total_pagado_cuota, 0)) > 0
+
+  ) x ON x.id_cliente = c.id
+
+  ORDER BY debe DESC, c.nombre ASC;
 `);
-
-
-    const clientes = detalle.map(c => {
+    // ====== 3) DEPURACIÓN / NORMALIZACIÓN DE DATOS ======
+    // Convierte strings/decimales de MySQL a números de JavaScript,
+    // calcula porcentajes y deja todos los objetos con la misma estructura.
+    const clientesNormales = detalle.map((c) => {
       const total = Number(c.total);
       const debe = Number(c.debe);
       const pagadas = Number(c.pagadas);
@@ -917,9 +1033,12 @@ const detalle = await pool.query(`
 
       return {
         id: c.id,
+        id_lote: c.id_lote,
         nombre: c.nombre,
         cuil_cuit: c.cuil_cuit,
-        zona:c.zona,
+        zona: c.zona,
+        origen: c.origen,
+
         total_devengado: Number(c.total_devengado),
         pagado: Number(c.pagado),
 
@@ -941,46 +1060,126 @@ const detalle = await pool.query(`
           ? Number(((liquidadas / total_cuotas) * 100).toFixed(1))
           : 0,
 
-        // 👇 MySQL ya devuelve JSON real
         cuotasquedebe: c.cuotasquedebe || []
       };
     });
 
+   const clientesIC3 = detalleIC3
+  .map((c) => {
+    const liquidadas = Number(c.liquidadas);
+    const pagadas = Number(c.pagadas);
+    const debe = Number(c.debe);
 
-    // ====== 2) RESUMEN GENERAL ======
+    const total_devengado = Number(c.total_devengado);
+    const pagado = Number(c.pagado);
+
+    return {
+      id: c.id,
+      id_lote: null,
+      nombre: c.nombre,
+      cuil_cuit: c.cuil_cuit,
+      zona: c.zona,
+      origen: c.origen,
+
+      total_devengado,
+      pagado,
+
+      debe,
+      pagadas,
+
+      total: liquidadas,
+      total_cuotas: liquidadas,
+      liquidadas,
+
+      porcentajeDebe: liquidadas > 0
+        ? Number(((debe / liquidadas) * 100).toFixed(2))
+        : 0,
+
+      porcentajePagadas: liquidadas > 0
+        ? Number(((pagadas / liquidadas) * 100).toFixed(2))
+        : 0,
+
+      porcentajeAvance: liquidadas > 0
+        ? Number(((pagadas / liquidadas) * 100).toFixed(1))
+        : 0,
+
+      cuotasquedebe: Array.isArray(c.cuotasquedebe)
+        ? c.cuotasquedebe.filter((cuota) => cuota !== null)
+        : []
+    };
+  })
+  .filter((cliente) => (cliente.total_devengado - cliente.pagado) >= 100);
+
+    // Une los clientes normales con los nuevos clientes IC3.
+    const clientes = [...clientesNormales, ...clientesIC3]
+      .sort((a, b) => b.debe - a.debe);
+
+    // ====== 4) RESUMEN GENERAL: NORMAL + IC3 ======
     const resumenQuery = await pool.query(`
-SELECT 
-  SUM(debe) AS debe,
-  SUM(pagadas) AS pagadas,
-  SUM(total) AS total,
-  SUM(total_cuotas) AS total_cuotas,
-  SUM(liquidadas) AS liquidadas
-FROM (
+      SELECT
+        COALESCE(SUM(debe), 0) AS debe,
+        COALESCE(SUM(pagadas), 0) AS pagadas,
+        COALESCE(SUM(total), 0) AS total,
+        COALESCE(SUM(total_cuotas), 0) AS total_cuotas,
+        COALESCE(SUM(liquidadas), 0) AS liquidadas
+      FROM (
 
-  SELECT 
-    SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
-    SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
-    COUNT(*) AS total,
-    COUNT(*) AS total_cuotas,
-    SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS liquidadas
-  FROM cuotas
-  WHERE parcialidad='Final'
-    AND NOT (mes = MONTH(CURDATE()) AND anio = YEAR(CURDATE()))
+        -- Sistema normal
+        SELECT
+          SUM(CASE WHEN diferencia < -1 THEN 1 ELSE 0 END) AS debe,
+          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS pagadas,
+          COUNT(*) AS total,
+          COUNT(*) AS total_cuotas,
+          SUM(CASE WHEN diferencia >= -1 THEN 1 ELSE 0 END) AS liquidadas
+        FROM cuotas
+        WHERE parcialidad = 'Final'
+          AND NOT (
+            mes = MONTH(CURDATE())
+            AND anio = YEAR(CURDATE())
+          )
 
-  UNION ALL
+        UNION ALL
 
-  SELECT
-    SUM(CASE WHEN (ci.cuota_con_ajuste - COALESCE(pi.monto,0)) < -1 THEN 1 ELSE 0 END) AS debe,
-    SUM(CASE WHEN (ci.cuota_con_ajuste - COALESCE(pi.monto,0)) >= -1 THEN 1 ELSE 0 END) AS pagadas,
-    COUNT(*) AS total,
-    COUNT(*) AS total_cuotas,
-    SUM(CASE WHEN (ci.cuota_con_ajuste - COALESCE(pi.monto,0)) >= -1 THEN 1 ELSE 0 END) AS liquidadas
-  FROM cuotas_ic3 ci
-  LEFT JOIN pagos_ic3 pi ON ci.id = pi.id_cuota
-  WHERE NOT (ci.mes = MONTH(CURDATE()) AND ci.anio = YEAR(CURDATE()))
+        -- Sistema IC3
+        SELECT
+          SUM(
+            CASE
+              WHEN COALESCE(p.total_pagado_cuota, 0) < ci.cuota_con_ajuste - 1
+              THEN 1
+              ELSE 0
+            END
+          ) AS debe,
 
-) x;
-`);
+          SUM(
+            CASE
+              WHEN COALESCE(p.total_pagado_cuota, 0) >= ci.cuota_con_ajuste - 1
+              THEN 1
+              ELSE 0
+            END
+          ) AS pagadas,
+
+          COUNT(*) AS total,
+          COUNT(*) AS total_cuotas,
+
+          COUNT(*) AS liquidadas
+
+        FROM cuotas_ic3 ci
+
+        LEFT JOIN (
+          SELECT
+            id_cuota,
+            SUM(monto) AS total_pagado_cuota
+          FROM pagos_ic3
+          GROUP BY id_cuota
+        ) p ON p.id_cuota = ci.id
+
+        WHERE NOT (
+          ci.mes = MONTH(CURDATE())
+          AND ci.anio = YEAR(CURDATE())
+        )
+
+      ) x;
+    `);
 
     const r = resumenQuery[0];
 
@@ -991,28 +1190,30 @@ FROM (
       total_cuotas: Number(r.total_cuotas),
       liquidadas: Number(r.liquidadas),
 
-      porcentajeDebe: r.total > 0
-        ? Number(((r.debe / r.total) * 100).toFixed(2))
+      porcentajeDebe: Number(r.total) > 0
+        ? Number(((Number(r.debe) / Number(r.total)) * 100).toFixed(2))
         : 0,
 
-      porcentajePagadas: r.total > 0
-        ? Number(((r.pagadas / r.total) * 100).toFixed(2))
+      porcentajePagadas: Number(r.total) > 0
+        ? Number(((Number(r.pagadas) / Number(r.total)) * 100).toFixed(2))
         : 0,
 
-      porcentajeAvance: r.total_cuotas > 0
-        ? Number(((r.liquidadas / r.total_cuotas) * 100).toFixed(1))
+      porcentajeAvance: Number(r.total_cuotas) > 0
+        ? Number(((Number(r.liquidadas) / Number(r.total_cuotas)) * 100).toFixed(1))
         : 0
     };
 
     // ====== RESPUESTA FINAL ======
+
     res.json([clientes, resumen]);
 
   } catch (error) {
     console.error("Error en API deudores:", error);
-    res.status(500).json({ error: "Error al obtener deudores" });
+    res.status(500).json({
+      error: "Error al obtener deudores"
+    });
   }
 };
-
 
 
 const cantidadInfo = async (req, res) => {
