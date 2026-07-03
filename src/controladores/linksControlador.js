@@ -1470,7 +1470,7 @@ const legajosCuil = async (req, res) => {
         const resultConComprobante = await Promise.all(
             result.map(async (item) => {
                 if (item.ubicacion) {
-                    const rutaArchivo = path.join(__dirname, '../documentos', item.ubicacion);
+                    const rutaArchivo = path.join(__dirname, '../../pdfs', item.ubicacion);
 
                     try {
                         await fs.promises.access(rutaArchivo);
