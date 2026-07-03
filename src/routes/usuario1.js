@@ -18,7 +18,7 @@ const {derivarpagoic3,cancelarlote,cancelarloteic3, enviarconsulta, constanciade
 // Configuración de Multer
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      const uploadPath = path.join(__dirname, '../documentos');
+      const uploadPath = path.join(__dirname, '../../pdfs');
       if (!fs.existsSync(uploadPath)) {
         fs.mkdirSync(uploadPath, { recursive: true });
       }
@@ -45,7 +45,7 @@ router.get('/traerpdfonstanciacbu/:id',async (req, res) => {
     const query = await pool.query('SELECT * FROM cbus WHERE id = ?',[id]);
   console.log(query)
   
-      const filePath = path.join(__dirname, '../documentos', query[0].ubicacion);
+      const filePath = path.join(__dirname, '../../pdfs', query[0].ubicacion);
       res.sendFile(filePath);
     ;
   });
@@ -54,7 +54,7 @@ router.get('/traerpdfconstancia/:id',async (req, res) => {
     const { id } = req.params;
     
     const query = await pool.query('SELECT * FROM constancias WHERE id = ?',[id]);
- const filePath = path.join(__dirname, '../documentos', query[0].ubicacion);
+ const filePath = path.join(__dirname, '../../pdfs', query[0].ubicacion);
 console.log("__dirname:", __dirname);
 console.log("ubicacion:", query[0].ubicacion);
 console.log("Ruta final:", filePath);
@@ -70,7 +70,7 @@ console.log("Ruta final:", filePath);
     const query = await pool.query('SELECT * FROM historial_pagosi WHERE id = ?',[id]);
   console.log(query)
   
-      const filePath = path.join(__dirname, '../documentos', query[0].ubicacion);
+      const filePath = path.join(__dirname, '../../pdfs', query[0].ubicacion);
       res.sendFile(filePath);
     ;
   });
@@ -80,7 +80,7 @@ console.log("Ruta final:", filePath);
     const query = await pool.query('SELECT * FROM historial_pagosi WHERE id = ?',[id]);
   console.log(query)
   
-      const filePath = path.join(__dirname, '../documentos', query[0].ubicacion2);
+      const filePath = path.join(__dirname, '../../pdfs', query[0].ubicacion2);
       res.sendFile(filePath);
     ;
   });
