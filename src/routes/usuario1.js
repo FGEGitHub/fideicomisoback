@@ -54,7 +54,7 @@ router.get('/traerpdfconstancia/:id',async (req, res) => {
     const { id } = req.params;
     
     const query = await pool.query('SELECT * FROM constancias WHERE id = ?',[id]);
- const filePath = path.join(__dirname, '../../pdfs', query[0].ubicacion);
+
 console.log("__dirname:", __dirname);
 console.log("ubicacion:", query[0].ubicacion);
 console.log("Ruta final:", filePath);
