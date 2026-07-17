@@ -608,31 +608,8 @@ function parseFecha(fecha) {
         }
     }
 
-    // 📌 DD/MM/YYYY
- // 📌 DD/MM/YYYY (FORZADO ARGENTINA)
-// 📌 FORZAR FORMATO BANCO (MM/DD → DD/MM)
-if (fecha.includes("/")) {
-    const partes = fecha.split("/");
-
-    if (partes.length === 3) {
-        let [p1, p2, p3] = partes;
-
-        let mes = p1;
-        let dia = p2;
-        let anio = p3;
-
-        if (anio.length === 2) {
-            anio = "20" + anio;
-        }
-
-        // 🔥 INVERTIMOS SIEMPRE
-        return `${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
-    }
-}
-
-    // 📌 YYYY-MM-DD
-  // 📌 FORMATO CON GUIONES
-// 📌 DD/MM/YYYY (FORZADO SIEMPRE)
+    // 📌 DD/MM/YYYY (formato argentino real de los extractos bancarios,
+    // ej. "8/6/2026" es el 8 de junio, no el 6 de agosto)
 if (fecha.includes("/")) {
     const partes = fecha.split("/");
 
@@ -680,7 +657,11 @@ const subirexceldemovimientos = async (req, res) => {
             return res.status(400).json({ error: "No se envió archivo" });
         }
 
-        const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+        // raw:true evita que XLSX auto-detecte fechas como si fueran celdas de
+        // Excel y las reformatee sola (para textos ambiguos tipo "2/02/2026"
+        // esto generaba un serial de fecha corrupto -1 día/mes). Con raw:true
+        // cada celda llega como el texto literal del archivo, sin adivinar tipos.
+        const workbook = XLSX.read(req.file.buffer, { type: "buffer", raw: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(sheet, {
             defval: "",
