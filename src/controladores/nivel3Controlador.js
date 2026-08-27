@@ -272,6 +272,252 @@ const reglas = [
 // =========================
 // 🔧 ANALISIS COMPLETO
 // =========================
+// =========================================================
+// TABLA DE CLASIFICACION POR CUIT (reemplaza la regla generica
+// que mandaba todo a "Honorarios Profesionales"). Definida a partir
+// del relevamiento de RECATEGORIZACION Y RECONCEPTUACION.xlsx.
+// Cada CUIT puede tener una clasificacion para 'debito' (egreso) y/o
+// 'credito' (ingreso) distinta - si no esta definida para una direccion,
+// el motor de reglas de abajo decide como antes.
+// =========================================================
+const CLASIFICACION_POR_CUIT = {
+    // ADRIANA DELIA SOLEDAD FAR
+    "27265600471": {
+        debito: { concepto: "Asesoria / Consultoria", categoria_general: "Sueldos", subcategoria: "Asesoria" },
+    },
+    // AGOSTINA AYMARA FALCON
+    "20429954860": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // AGUA NOBLE SRL
+    "30714916072": {
+        debito: { concepto: "Agua", categoria_general: "Otros Gastos", subcategoria: "Agua" },
+    },
+    // ALBORNOZ JUAN RAMON
+    "20230765244": {
+        debito: { concepto: "Varios", categoria_general: "Escribania", subcategoria: "Honorarios" },
+    },
+    // ALFREDO ADRIAN VERA
+    "20229370554": {
+        debito: { concepto: "Seguridad - Adicional de Policias", categoria_general: "Seguridad", subcategoria: "Policial" },
+    },
+    // ARCE NAHUEL ROLANDO
+    "20408169152": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // ARIEL OMAR LOPEZ
+    "20248659506": {
+        debito: { concepto: "Seguridad - Adicional de Policias", categoria_general: "Seguridad", subcategoria: "Policial" },
+    },
+    // AYALA RAMONA
+    "27366754658": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // BARRIENTOS BARBARA CATHERINE
+    "23416278474": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // BENITEZ MATIAS EMMANUEL
+    "20336834148": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // BRASCHI RUBEN DARIO
+    "20229298667": {
+        debito: { concepto: "Seguridad - Banos Quimicos", categoria_general: "Seguridad", subcategoria: "Banos Quimicos" },
+    },
+    // CAJA MUNIC DE PRESTAMOS
+    "30608517290": {
+        debito: { concepto: "Reintegro de sueldos y movilidad", categoria_general: "Sueldos", subcategoria: "Reintegros" },
+    },
+    // CARLOS EDUARDO CANDIA
+    "20328022932": {
+        debito: { concepto: "Mensuras", categoria_general: "Otros Gastos", subcategoria: "Mensuras" },
+    },
+    // CIA DE SEG LA MERCANTIL
+    "30500036911": {
+        debito: { concepto: "Seguros", categoria_general: "Otros Gastos", subcategoria: "Seguros" },
+    },
+    // CONS DE COPROPIETARIOS
+    "30718348044": {
+        debito: { concepto: "Expensas SC", categoria_general: "Expensas", subcategoria: "Expensas" },
+    },
+    // DANIEL HUGO GOMEZ
+    "20270957804": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // DELGADO ADRIANA EVELIN
+    "27377963119": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // EMMANUEL MATIAS NIGRO CARDENAS
+    "20363177914": {
+        debito: { concepto: "Serv. Luz y Agua", categoria_general: "Otros Gastos", subcategoria: "Luz y Agua" },
+    },
+    // ENRIQUE FERNANDO GABRIEL
+    "20348251253": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // FLORES IVAN MARCELO
+    "23369898019": {
+        debito: { concepto: "Varios", categoria_general: "Otros Gastos", subcategoria: "Varios" },
+    },
+    // GALLARDO ALDANA LUJAN
+    "27337293854": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // GIGARED SA
+    "30663045179": {
+        debito: { concepto: "Servicio de Internet", categoria_general: "Otros Gastos", subcategoria: "Internet" },
+    },
+    // GOMEZ MAYRA SOLEDAD
+    "27302527747": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // GONZALEZ GREGORIO A
+    "20334711340": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // INTEGRIA CONSULTIN
+    "30718070054": {
+        debito: { concepto: "Asesoria / Consultoria", categoria_general: "Sueldos", subcategoria: "Asesoria" },
+    },
+    // JMS SRL
+    "30717502732": {
+        debito: { concepto: "Extraord. Cerramiento / Legales", categoria_general: "Otros Gastos", subcategoria: "Cerramiento" },
+    },
+    // JUAN PABLO EDUARDO ENRIQUEZ
+    "20339484547": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // LENCINA BERNARDO BENJAMIN
+    "20226418130": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // LUIS ANGEL CUADRADO
+    "20079145514": {
+        debito: { concepto: "Insumos Informaticos", categoria_general: "Otros Gastos", subcategoria: "Informatica" },
+    },
+    // MATIAS JOSE MARTINEZ (compensacion: entra y sale, no es ingreso ni gasto real)
+    "20317205857": {
+        debito: { concepto: "No encontrado", categoria_general: "Otros", subcategoria: "Otros" },
+        credito: { concepto: "No encontrado", categoria_general: "Otros", subcategoria: "Otros" },
+    },
+    // MF SERVICIOS INTEG
+    "30718859502": {
+        debito: { concepto: "Seguridad - Empresa de Seguridad", categoria_general: "Seguridad", subcategoria: "Empresa de Seguridad" },
+    },
+    // MILANO RICARDO MAXIMO
+    "20200852193": {
+        debito: { concepto: "Libreria", categoria_general: "Otros Gastos", subcategoria: "Libreria" },
+    },
+    // MINO RAFAEL ANTONIO
+    "20327327780": {
+        debito: { concepto: "Mensuras", categoria_general: "Otros Gastos", subcategoria: "Mensuras" },
+    },
+    // MIRIAN LUCIA GONZALEZ (el credito es una compensacion: cash-out recibido y devuelto)
+    "27354373047": {
+        debito: { concepto: "Serv. Luz y Agua", categoria_general: "Otros Gastos", subcategoria: "Luz y Agua" },
+        credito: { concepto: "No encontrado", categoria_general: "Otros", subcategoria: "Otros" },
+    },
+    // MOREL DAVID EZEQUIEL
+    "20364688882": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // MUNIZ MARIA JOSE
+    "27420680924": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // PABLO DARIO DANIEL REVIDA
+    "20182958620": {
+        debito: { concepto: "Alquiler de casa", categoria_general: "Otros Gastos", subcategoria: "Alquiler" },
+    },
+    // PENAYO SANDRA ISABEL
+    "27201836803": {
+        debito: { concepto: "Varios", categoria_general: "Escribania", subcategoria: "Honorarios" },
+    },
+    // PIXEL INFORMATICA S R L
+    "30708931949": {
+        debito: { concepto: "Insumos Informaticos", categoria_general: "Otros Gastos", subcategoria: "Informatica" },
+    },
+    // RAMIREZ CASTANEDA F
+    "20338551348": {
+        debito: { concepto: "Gastos Judiciales", categoria_general: "Otros Gastos", subcategoria: "Judiciales" },
+    },
+    // RAMIREZ OSCAR RAMIRO
+    "20233474771": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // SANCOR COOPERATIVA DE SEGUROS
+    "30500049460": {
+        debito: { concepto: "Seguros", categoria_general: "Otros Gastos", subcategoria: "Seguros" },
+    },
+    // SEGOVIA JOSE RAMON
+    "20223213422": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // SERVICIOS Y SISTEMAS SRL
+    "30708592370": {
+        debito: { concepto: "Serv. Tecnico de PC", categoria_general: "Otros Gastos", subcategoria: "Tecnico PC" },
+    },
+    // SILVA MARIA BELEN
+    "27327292272": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // SILVERO MACHUCA JUAN FRANCISCO
+    "20325516403": {
+        debito: { concepto: "Honorarios Profesionales", categoria_general: "Sueldos", subcategoria: "Honorarios" },
+    },
+    // SINOPOLIS MAXIMILIANO JAVIER
+    "23249084239": {
+        debito: { concepto: "Serv. Tecnico de PC", categoria_general: "Otros Gastos", subcategoria: "Tecnico PC" },
+    },
+    // SUPERLIM SAS
+    "30716771578": {
+        debito: { concepto: "Serv. de Limpieza", categoria_general: "Otros Gastos", subcategoria: "Limpieza" },
+        credito: { concepto: "Cobranzas SC - Parque Industrial", categoria_general: "Cobranzas", subcategoria: "Cobranzas", proyecto: "PIT" },
+    },
+    // EJECUCION PRESUPUESTARIA (ingreso: fondo municipal)
+    "30584152474": {
+        credito: { concepto: "Fondo Municipal", categoria_general: "Otros", subcategoria: "Fondo Municipal" },
+    },
+    // BOTELLO PAULA (ingreso: reintegro de sellos, misma logica que Ward)
+    "27316865211": {
+        credito: { concepto: "Reintegro de Sellos", categoria_general: "Escribania", subcategoria: "Reintegro" },
+    },
+    // Adolfo Raul Gonzalez (ingreso: cobranza Parque Industrial)
+    "20144597525": {
+        credito: { concepto: "Cobranzas SC - Parque Industrial", categoria_general: "Cobranzas", subcategoria: "Cobranzas", proyecto: "PIT" },
+    },
+    // ARENGO MAMBRIN SRL (ingreso: cobranza Parque Industrial)
+    "30716001608": {
+        credito: { concepto: "Cobranzas SC - Parque Industrial", categoria_general: "Cobranzas", subcategoria: "Cobranzas", proyecto: "PIT" },
+    },
+    // Walter Luis Bizarro (ingreso: cobranza Parque Industrial)
+    "20261084768": {
+        credito: { concepto: "Cobranzas SC - Parque Industrial", categoria_general: "Cobranzas", subcategoria: "Cobranzas", proyecto: "PIT" },
+    },
+    // TRI SOLE SA
+    "30714664928": {
+        debito: { concepto: "Combustible", categoria_general: "Otros Gastos", subcategoria: "Combustible" },
+    },
+    // WARD MARIA VICTORIA
+    "27217344471": {
+        debito: { concepto: "Varios", categoria_general: "Escribania", subcategoria: "Honorarios" },
+        credito: { concepto: "Reintegro de Sellos", categoria_general: "Escribania", subcategoria: "Reintegro" },
+    },
+    // ZALAZAR ZONE JOSUE
+    "20439305658": {
+        debito: { concepto: "Asesoria / Consultoria", categoria_general: "Sueldos", subcategoria: "Asesoria" },
+    },
+};
+
+// true si ya existe una clasificacion propia (por CUIT) para esta direccion -
+// se usa para que la logica de cobranzas/"No encontrado" de mas abajo no
+// pise una clasificacion ya resuelta explicitamente.
+function tieneClasificacionPropia(cuit, direccion) {
+    return Boolean(cuit && CLASIFICACION_POR_CUIT[cuit] && CLASIFICACION_POR_CUIT[cuit][direccion]);
+}
+
 function analizarDescripcion(texto, debito = 0, credito = 0) {
 
     let cuit = null;
@@ -311,6 +557,27 @@ if (credito > 0 && debito === 0) {
 } else {
     tipo_operacion = null;
 }
+
+    // =========================
+    // TABLA POR CUIT (prioridad maxima, antes que cualquier regla generica)
+    // =========================
+    if (cuit && tipo_operacion) {
+        const direccion = tipo_operacion === "Crédito" ? "credito" : "debito";
+        const propia = CLASIFICACION_POR_CUIT[cuit] && CLASIFICACION_POR_CUIT[cuit][direccion];
+
+        if (propia) {
+            return {
+                cuit,
+                razon_social,
+                concepto: propia.concepto,
+                tipo_operacion,
+                categoria_general: propia.categoria_general,
+                subcategoria: propia.subcategoria,
+                proyecto: propia.proyecto || proyecto,
+                tipo_gasto: tipo_operacion === "Débito" ? "Variable" : null,
+            };
+        }
+    }
 
     // =========================
     // PROYECTO
@@ -357,44 +624,16 @@ if (credito > 0 && debito === 0) {
         subcategoria: "Empresa de Seguridad"
     })
 },
-{
-    test: () => cuit === "30608517290",
-    result: () => ({
-        concepto: "Reintegro de sueldos y movilidad",
-        categoria_general: "Ingresos",
-        subcategoria: "Reintegros"
-    })
-},
-{
-    test: () => cuit === "23249084239",
-    result: () => ({
-        concepto: "Otros Egresos",
-        categoria_general: "Otros",
-        subcategoria: "Otros"
-    })
-},
-{
-    test: () => cuit === "20182958620",
-    result: () => ({
-        concepto: "Alquiler de casa",
-        categoria_general: "Gastos",
-        subcategoria: "Alquiler"
-    })
-},
+// Nota: 30608517290, 23249084239, 20182958620, 30718348044 y 30714664928 ya no
+// tienen regla aca - los resuelve CLASIFICACION_POR_CUIT (mas arriba) con la
+// categoria/concepto ya corregidos, asi que esta parte del array nunca los
+// llega a evaluar.
 {
     test: () => cuit === "30669726712",
     result: () => ({
         concepto: "Seguridad - Adicional de Policias",
         categoria_general: "Seguridad",
         subcategoria: "Policial"
-    })
-},
-{
-    test: () => cuit === "30718348044",
-    result: () => ({
-        concepto: "Expensas SC",
-        categoria_general: "Gastos",
-        subcategoria: "Expensas"
     })
 },
 {
@@ -414,31 +653,25 @@ if (credito > 0 && debito === 0) {
     })
 },
 
-{
-    test: () => cuit === "30714664928",
-    result: () => ({
-        concepto: "Combustible",
-        categoria_general: "Gastos",
-        subcategoria: "Combustible"
-    })
-},
-
         // ================= CREDITOS =================
+        // (la regla generica "cualquier CUIT reconocido -> Honorarios Profesionales"
+        // se elimino: era la causa de que casi todo terminara en ese concepto.
+        // Ahora, si el CUIT no esta en CLASIFICACION_POR_CUIT, se sigue evaluando
+        // el resto de las reglas de abajo segun el texto de la descripcion.)
         {
-            test: () =>
-    cuit !== null &&
-    !["30709110078", "33693450239"].includes(cuit),
+            test: () => tipo_operacion === "Crédito" && texto.includes("REMESA"),
             result: () => ({
-                concepto: "Honorarios Profesionales",
-                categoria_general: "Legales",
-                subcategoria: "Honorarios"
+                concepto: "Ingresos PIT/IC3",
+                categoria_general: "Cheques",
+                subcategoria: "Remesas"
             })
         },
+
         {
             test: () => tipo_operacion === "Crédito" && texto.includes("TRANSFERENCIA"),
             result: () => ({
                 concepto: "Transferencia de fondos",
-                categoria_general: "Ingresos",
+                categoria_general: "Transferencias",
                 subcategoria: "Transferencias"
             })
         },
@@ -447,7 +680,7 @@ if (credito > 0 && debito === 0) {
             test: () => tipo_operacion === "Crédito",
             result: () => ({
                 concepto: "Otros Ingresos",
-                categoria_general: "Ingresos",
+                categoria_general: "Otros",
                 subcategoria: "Otros"
             })
         },
@@ -807,12 +1040,18 @@ for (const row of rowsExistentes) {
             // 🔥 LOGICA DE COBRANZAS
             // =========================================================
 
-            if (analisis.cuit && analisis.tipo_operacion === "Crédito") {
+            if (
+                analisis.cuit &&
+                analisis.tipo_operacion === "Crédito" &&
+                !tieneClasificacionPropia(analisis.cuit, "credito")
+            ) {
 
                 const zonas = cacheClientes[analisis.cuit];
 
                 if (!zonas) {
                     analisis.concepto = "No encontrado";
+                    analisis.categoria_general = "Otros";
+                    analisis.subcategoria = "Otros";
                 } else {
 
                     const tieneIC3 = zonas.some(z =>
@@ -825,18 +1064,20 @@ for (const row of rowsExistentes) {
 
                     if (tienePIT) {
                         analisis.concepto = "Cobranzas SC - Parque Industrial";
-                        analisis.categoria_general = "Ingresos";
+                        analisis.categoria_general = "Cobranzas";
                         analisis.subcategoria = "Cobranzas";
                         analisis.proyecto = "PIT";
 
                     } else if (tieneIC3) {
                         analisis.concepto = "Cobranzas SC - Fracción IC3";
-                        analisis.categoria_general = "Ingresos";
+                        analisis.categoria_general = "Cobranzas";
                         analisis.subcategoria = "Cobranzas";
                         analisis.proyecto = "IC3";
 
                     } else {
                         analisis.concepto = "No encontrado";
+                        analisis.categoria_general = "Otros";
+                        analisis.subcategoria = "Otros";
                     }
                 }
             }
@@ -1931,5 +2172,7 @@ module.exports = {
     subirexceldemovimientos2,
     traermovimientos,
     mofificarmconcepto,
-traeringresos
+traeringresos,
+analizarDescripcion,
+CLASIFICACION_POR_CUIT
 }
