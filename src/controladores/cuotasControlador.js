@@ -1847,6 +1847,226 @@ const agregarcuotasleg = async (req, res) => {
 }
 
 
+// =========================================================================
+// FLUJO DE FONDOS PIT (nivel6) — agregado mensual de TODOS los clientes
+// del Parque (tablas `cuotas` + `pagos`, generales — no cuotas_ic3/pagos_ic3).
+//
+// Reproduce la lógica del cuadro "Flujo Mensual" que arma el área de
+// cobranzas en Excel:
+//   - Devengado          -> SUM(cuota_con_ajuste || Amortizacion) de las cuotas
+//                            cuyo mes/año PROPIO (lo que vencía) cae en este mes.
+//   - Cobrado (cuotas) / Total ingresado en el mes -> plata efectivamente
+//                            cobrada, agrupada por el mes/año REAL en que se
+//                            registró el pago (no el mes en que vencía la cuota).
+//   - Importe a cuotas del mes -> la parte de lo cobrado cuyo mes real de pago
+//                            coincide con el mes en que vencía la cuota (cobro
+//                            en término).
+//   - Cuotas Impagas     -> Devengado - Importe a cuotas del mes.
+//   - % Cobranza         -> Cobrado / Devengado.
+//   - Diferencia Dev.    -> Devengado - Cobrado.
+//   - diferencia         -> Total ingresado en el mes - Importe a cuotas del mes.
+//
+// IMPORTANTE sobre las fuentes de "cobrado": en la base conviven dos formas
+// de registrar un pago —
+//   1) la vía nueva (con comprobante adjunto, ruta /usuario1/pagonivel2) que
+//      inserta una fila en `pagos` con la fecha real del pago, y
+//   2) una vía vieja (pago rápido sin comprobante) que solo actualiza
+//      `cuotas.pago` de forma acumulada, sin dejar fila en `pagos` ni fecha.
+// Para no perder esos pagos viejos, cualquier diferencia entre `cuotas.pago`
+// y lo que suma `pagos` para esa cuota se imputa al mes propio de la cuota
+// (es lo único que se sabe de esos pagos: a qué cuota corresponden).
+//
+// Nota: en el Excel de referencia, "TOTAL MENSUAL" coincide con "Total
+// ingresado por pagos" (la plata real que entró, con excedente incluido) —
+// acá se calcula igual, con la misma fórmula.
+const flujoPit = async (req, res) => {
+    try {
+        const anio = parseInt(req.params.anio, 10) || new Date().getFullYear()
+
+        // Trae TODAS las cuotas activas (no solo las del año pedido): un pago
+        // puede haberse cobrado en un mes/año distinto al que vencía la cuota,
+        // y "Cobrado"/"Total ingresado" tienen que verlo igual.
+        // - cuota_cancelada = 'No'  -> excluye cuotas dadas de baja/reemplazadas
+        //   (el campo guarda el string 'No', o el id de la cuota que la reemplazó)
+        // - NO se filtra por `parcialidad`: no es una copia duplicada, es el
+        //   estado de la MISMA cuota ("Original" = todavía no se le corrió el
+        //   ajuste ICC del mes, "Final" = ya tiene el monto ajustado definitivo).
+        //   Filtrar solo por "Final" dejaba afuera meses enteros que aún están
+        //   "Original" y hacía que el Devengado se desplomara a casi cero.
+        // - zona = 'PIT'            -> la tabla `cuotas` es compartida con otras
+        //   carteras que no son el Parque Industrial ('Legales', 'IC3'); sin
+        //   este filtro se sumaban esas cuotas también.
+        const cuotas = await pool.query(
+            `SELECT id, mes, anio, cuota_con_ajuste, Amortizacion, pago, parcialidad
+             FROM cuotas
+             WHERE cuota_cancelada = 'No' AND zona = 'PIT'`
+        )
+
+        const cuotaPorId = {}
+        for (const c of cuotas) {
+            cuotaPorId[c.id] = c
+        }
+
+        const idsCuotas = cuotas.map((c) => c.id)
+
+        let pagos = []
+        if (idsCuotas.length > 0) {
+            pagos = await pool.query(
+                `SELECT id_cuota, monto, fecha
+                 FROM pagos
+                 WHERE id_cuota IN (?) AND (estado IS NULL OR estado = 'A')`,
+                [idsCuotas]
+            )
+        }
+
+        const pagosPorCuota = {}
+        for (const p of pagos) {
+            if (!pagosPorCuota[p.id_cuota]) pagosPorCuota[p.id_cuota] = []
+            pagosPorCuota[p.id_cuota].push(p)
+        }
+
+        // La columna `fecha` de `pagos` es texto y tiene formatos mezclados
+        // (ISO, dd/mm/aaaa, y algún dato corrupto) — se parsea a mano.
+        const parsearFechaPago = (valor) => {
+            if (!valor) return null
+            const texto = String(valor).trim()
+
+            let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})/)
+            if (m) {
+                const anioP = parseInt(m[1], 10)
+                const mesP = parseInt(m[2], 10)
+                if (anioP > 1900 && mesP >= 1 && mesP <= 12) return { anio: anioP, mes: mesP }
+                return null
+            }
+
+            m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+            if (m) {
+                const anioP = parseInt(m[3], 10)
+                const mesP = parseInt(m[2], 10)
+                if (anioP > 1900 && mesP >= 1 && mesP <= 12) return { anio: anioP, mes: mesP }
+                return null
+            }
+
+            return null
+        }
+
+        // Valor "nominal" de una cuota: el monto ya ajustado por ICC si ya se
+        // corrió ese proceso para el mes (post_agregaricc), o si todavía es
+        // "Original" (ICC pendiente) el monto base (Amortizacion) como mejor
+        // estimación disponible. Un cuota_con_ajuste en 0/null se trata como
+        // "todavía no calculado", no como "la cuota vale 0".
+        const montoNominal = (cuota) => {
+            const ajustado = parseFloat(cuota.cuota_con_ajuste) || 0
+            if (ajustado > 0) return ajustado
+            return parseFloat(cuota.Amortizacion) || 0
+        }
+
+        const meses = {}
+        for (let mes = 1; mes <= 12; mes++) {
+            meses[mes] = {
+                mes,
+                devengado: 0,
+                totalIngresadoPorPagos: 0,
+                cobradoCuotas: 0,
+                importeACuotasDelMes: 0,
+            }
+        }
+
+        // Devengado: solo cuotas cuyo propio mes/año de vencimiento es el pedido.
+        for (const cuota of cuotas) {
+            if (cuota.anio !== anio) continue
+            meses[cuota.mes].devengado += montoNominal(cuota)
+        }
+
+        // Total ingresado por pagos: TODA la plata que efectivamente entró, sin
+        // tope — si una cuota de $2M se pagó con $17M (excedente incluido), acá
+        // se cuentan los $17M enteros. Se agrupa por el mes REAL del pago.
+        for (const pago of pagos) {
+            const fechaReal = parsearFechaPago(pago.fecha)
+            if (!fechaReal || fechaReal.anio !== anio) continue
+            meses[fechaReal.mes].totalIngresadoPorPagos += parseFloat(pago.monto) || 0
+        }
+
+        // Cobrado (cuotas) + Importe a cuotas del mes: acá NO se cuenta el
+        // excedente — cada cuota aporta como máximo su propio valor nominal
+        // (si de $2M se pagaron $17M, solo suman $2M). Se atribuye al mes real
+        // en que se cobró (el último pago que la tocó); si solo tiene el
+        // "residual" viejo sin fecha (ver nota de arriba), se atribuye a su
+        // propio mes de vencimiento por no tener mejor dato.
+        for (const cuota of cuotas) {
+            const nominal = montoNominal(cuota)
+
+            const pagosCuota = pagosPorCuota[cuota.id] || []
+            let sumaConFecha = 0
+            let fechaCobro = null
+
+            for (const p of pagosCuota) {
+                sumaConFecha += parseFloat(p.monto) || 0
+                const f = parsearFechaPago(p.fecha)
+                if (f && (!fechaCobro || f.anio > fechaCobro.anio || (f.anio === fechaCobro.anio && f.mes >= fechaCobro.mes))) {
+                    fechaCobro = f
+                }
+            }
+
+            const pagoAcumulado = parseFloat(cuota.pago) || 0
+            const residualSinFecha = Math.max(0, pagoAcumulado - sumaConFecha)
+
+            // El residual viejo también es plata real que entró, aunque no
+            // sepamos el mes exacto -> se suma a "Total ingresado por pagos"
+            // imputado al mes propio de la cuota.
+            if (residualSinFecha > 0.5 && cuota.anio === anio) {
+                meses[cuota.mes].totalIngresadoPorPagos += residualSinFecha
+            }
+
+            const totalPagadoCuota = sumaConFecha + residualSinFecha
+            if (totalPagadoCuota <= 0 || nominal <= 0) continue
+
+            if (!fechaCobro) {
+                fechaCobro = { anio: cuota.anio, mes: cuota.mes }
+            }
+            if (fechaCobro.anio !== anio) continue
+
+            const cobradoNominal = Math.min(totalPagadoCuota, nominal)
+            meses[fechaCobro.mes].cobradoCuotas += cobradoNominal
+
+            if (fechaCobro.mes === cuota.mes && fechaCobro.anio === cuota.anio) {
+                meses[cuota.mes].importeACuotasDelMes += cobradoNominal
+            }
+        }
+
+        const resultado = []
+        for (let mes = 1; mes <= 12; mes++) {
+            const { devengado, totalIngresadoPorPagos, cobradoCuotas, importeACuotasDelMes } = meses[mes]
+            const totalIngresadoEnElMes = cobradoCuotas
+            // TOTAL MENSUAL: en el Excel de referencia coincide con "Total
+            // ingresado por pagos" (la plata real que entró ese mes, con
+            // excedente incluido), no con "Cobrado (cuotas)".
+            const totalMensual = totalIngresadoPorPagos
+
+            resultado.push({
+                mes,
+                devengado,
+                totalIngresadoPorPagos,
+                cobradoCuotas,
+                cuotasImpagas: devengado - importeACuotasDelMes,
+                totalMensual,
+                porcentajeCobranza: devengado > 0 ? cobradoCuotas / devengado : null,
+                diferenciaDev: devengado - cobradoCuotas,
+                importeACuotasDelMes,
+                totalIngresadoEnElMes,
+                diferencia: totalIngresadoEnElMes - importeACuotasDelMes
+            })
+        }
+
+        res.json({ anio, meses: resultado })
+
+    } catch (error) {
+        console.error('Error en flujoPit:', error)
+        res.status(500).json({ error: 'Error al calcular el flujo de fondos PIT' })
+    }
+}
+
+
 
 module.exports = {
     vercuotas2,
@@ -1876,6 +2096,7 @@ module.exports = {
     traercuotasdisponiblesporlote,
     iefgralleg,
     compensar,
-    compensaric3
+    compensaric3,
+    flujoPit
 
 }

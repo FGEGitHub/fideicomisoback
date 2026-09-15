@@ -4,7 +4,7 @@ const pool = require('../database')
 
 const { isLoggedIn, isLoggedInn2, isLoggedInn4, isLoggedInn } = require('../lib/auth') //proteger profile
 
-const {compensaric3, compensar, cancelarlote,addautvarias, cuotasdeunlote, postadd, postaddaut2, lotefuncion2, post_agregaricc, asignarloteacuotas, modificarmontototal, traercuotaselcliente, listavarios, deletes, postcuotas, actualizarcuota, borrartodas, ief, traercuota, traercuotasfinales, agregarcuotasleg, vercuotas2, vercuotas4, ief2, borrarpago, traercuotasdisponiblesporlote, iefgralleg } = require('../controladores/cuotasControlador')
+const {compensaric3, compensar, cancelarlote,addautvarias, cuotasdeunlote, postadd, postaddaut2, lotefuncion2, post_agregaricc, asignarloteacuotas, modificarmontototal, traercuotaselcliente, listavarios, deletes, postcuotas, actualizarcuota, borrartodas, ief, traercuota, traercuotasfinales, agregarcuotasleg, vercuotas2, vercuotas4, ief2, borrarpago, traercuotasdisponiblesporlote, iefgralleg, flujoPit } = require('../controladores/cuotasControlador')
 
 
 
@@ -119,6 +119,9 @@ router.get('/traercuotasfinales/:id', isLoggedInn2, traercuotasfinales)
 
 
 router.get('/traercuotasdisponiblesporlote/:id', isLoggedInn2, traercuotasdisponiblesporlote)
+
+// Flujo de fondos PIT agregado (nivel6) — todos los clientes del Parque, por mes de un año
+router.get('/flujopit/:anio', isLoggedInn, flujoPit)
 
 /* router.get('/actualic3', async (req, res) => {
 
