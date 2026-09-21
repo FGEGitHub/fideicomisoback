@@ -1140,8 +1140,8 @@ for (const row of rowsExistentes) {
 
 const mofificarmconcepto = async (req, res) => {
     try {
-        const { id, concepto } = req.body;
-        console.log(id, concepto)
+        const { id, concepto, categoria_general, subcategoria } = req.body;
+        console.log(id, concepto, categoria_general, subcategoria)
         // 🔴 Validaciones básicas
         if (!id) {
             return res.status(400).json({ error: "Falta el ID" });
@@ -1161,10 +1161,26 @@ const mofificarmconcepto = async (req, res) => {
             return res.status(404).json({ error: "Movimiento no encontrado" });
         }
 
-        // 💾 Update
+        // 💾 Update — categoria_general y subcategoria son opcionales: si no vienen
+        // en el body (caso del editor manual, que solo manda concepto), se dejan como están.
+        const campos = ["concepto = ?"];
+        const valores = [concepto];
+
+        if (categoria_general !== undefined) {
+            campos.push("categoria_general = ?");
+            valores.push(categoria_general);
+        }
+
+        if (subcategoria !== undefined) {
+            campos.push("subcategoria = ?");
+            valores.push(subcategoria);
+        }
+
+        valores.push(id);
+
         await pool.query(
-            "UPDATE movimientos SET concepto = ? WHERE id = ?",
-            [concepto, id]
+            `UPDATE movimientos SET ${campos.join(", ")} WHERE id = ?`,
+            valores
         );
 
         res.json({
