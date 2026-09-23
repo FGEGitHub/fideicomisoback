@@ -509,6 +509,11 @@ router.get("/cantidadpendientes", isLoggedInn2, async (req, res) => {
 
 
 
+///// Editar / cancelar un pago cargado (deja la cuota recalculada y auditoría)
+const pagosEdicion = require('../controladores/pagosEdicion')
+router.post('/editarpago', isLoggedInn2, pagosEdicion.editarPago)
+router.post('/cancelarpago', isLoggedInn2, pagosEdicion.cancelarPago)
+
 /////detalles de todos los pagos de una cuota
 router.post("/detallespagos", isLoggedInn2, async (req, res) => {
     const { id } = req.body
