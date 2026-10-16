@@ -8,6 +8,7 @@ const multer = require('multer')
 const path = require('path')
 const enviodemail = require('./Emails/Enviodemail')
 const { determinarEmpresa, habilitar, estadisticasLegajos, deshabilitar, borrarCbu, cbusPendientes, legajosCuil, ventalotee, add2,add3, modificarCuil, AgregarIngreso, detalleCuil, cantidadInfo, lista2, ventaLoteleg, deudores } = require('../controladores/linksControlador')
+const { deudoresParque } = require('../controladores/deudoresParqueControlador')
 //const { busquedarenapet } = require('./funciones/buscarrenapet');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
@@ -62,6 +63,9 @@ router.get('/infocantidad',cantidadInfo )
 
 
 router.get('/deudores',deudores )
+
+// Deudores del Parque (nivel2): una fila por cliente habilitado con cuotas vigentes
+router.get('/deudoresparque', isLoggedInn2, deudoresParque)
 
 router.get('/completarobservaciones',async (req, res) => {
     try {

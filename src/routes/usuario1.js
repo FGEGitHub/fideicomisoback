@@ -139,7 +139,7 @@ router.post('/pagarnivel2ic3', upload.single('file'), s3Controller.pagarnivel2ic
 
 router.post('/pagarnivel1cuota', upload.single('file'), s3Controller.pagarnivel1cuota);
 
-router.post('/pagarnivel2varios', isLoggedInn2, s3Controller.pagarnivel2varios);
+router.post('/pagarnivel2varios', isLoggedInn2, upload.single('file'), s3Controller.pagarnivel2varios);
 
 
 

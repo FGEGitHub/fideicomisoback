@@ -1815,133 +1815,187 @@ async function pagarnivel2ic3(req, res) {
         res.json([mensaje, cuota[0]['cuil_cuit'], cuota[0]['id_lote']])
     }
 }
+// =========================================================================
+// PAGO DE VARIAS CUOTAS CON UN SOLO COMPROBANTE (nivel2)
+//
+// El operador elige la fecha en que entró el dinero y reparte los montos entre
+// las cuotas que corresponden (p. ej. julio, agosto y septiembre pagadas en
+// octubre). Se guarda UN pago por cada cuota —igual que el pago de una sola
+// cuota—, todos con la misma fecha y el mismo comprobante. El cuadro de cuotas
+// se calcula a partir de la tabla `pagos`, así que no hace falta nada más.
+//
+// Campos (multipart/form-data):
+//   cuil_cuit : CUIL del administrador que carga el pago
+//   id_cuota  : cuota desde la que se inició la carga (define el cliente)
+//   fecha     : fecha del pago
+//   pagos     : JSON  [{ "id_cuota": 123, "monto": 150000 }, ...]
+//   file      : comprobante (opcional)
+//
+// Todo se valida antes de guardar; si falla un INSERT se deshacen los ya
+// guardados en esta misma carga, así nunca queda un pago a medias.
+// Siempre responde (ok o error) para que la pantalla no quede "cargando".
+// =========================================================================
 async function pagarnivel2varios(req, res) {
 
-    const filename = req.file.filename
+    const filename = req.file ? req.file.filename : 'sin comprobante';
+    const insertados = [];
 
-    const myArray = formData.datos.split(",");
-
-    cuil_cuit_administrador = myArray[0] /// del administrador
-
-    fecha = myArray[1]
-    id = myArray[2]
-
-
-    ///INICIO GUARDADO DE PAGO
-
-
-    let cuil_cuit_distinto = 'No'
-    let monto_distinto = 'No'
-    let monto_inusual = 'No'
-    let mensaje = ''
-
-    const cuota = await pool.query('select * from cuotas where id = ?', [id]) //objeto cuota
-    aux = '%' + cuota[0]["cuil_cuit"] + '%'
-
-    cuil_cuit = cuota[0]["cuil_cuit"]
-    let cuota_con_ajuste = cuota[0]["cuota_con_ajuste"]
-    let saldo_realc = cuota[0]["Saldo_real"]
-    Saldo_real = parseFloat(cuota[0]["Saldo_real"])
-    let nro_cuota = cuota[0]["nro_cuota"]
-    let id_lote = cuota[0]["id_lote"]
-    let Amortizacion = cuota[0]["Amortizacion"]
-    let diferencia = cuota[0]["diferencia"]
-
-
-
-
-
-
-    mes = cuota[0]["mes"]
-    anio = cuota[0]["anio"]
-
-    estado = 'A'
-
-    if (cuota[0]['parcialidad'] === 'Final') {
-        /// traer la ultima
-
-        ///
-
-        /////////FIN  GUARDADO DE PAGO
-
-
-
-        let regex = /(\d+)/g;
-        monto = 0
-        for (iii = 3; iii < (myArray.length); iii++) {
-
-
-            auxxx = myArray[iii].split(":")
-
-            idd = auxxx[0].match(regex)
-            mont = auxxx[1].match(regex)
-
-            if (mont.length > 1) {
-                mont = [mont[0] + "." + mont[1]]
-            }
-
-            idd = parseInt(idd[0])
-            mont = parseFloat(mont[0])
-
-            monto = monto + mont
-
-            await pagodecuota.pagodecuota(idd, mont)
-
-        }
-
-
-        //pagodecuota.pagodecuota(id, monto)
-
-        const cuota = await pool.query('select * from cuotas where id = ?', [idd]) //objeto cuota
-        aux = cuota[0]["cuil_cuit"]
-        mensaje = 'Pagos realizados'
-
-
-        let cliente = await pool.query('Select * from clientes where cuil_cuit like ? ', [aux])
-
-
-        montomax = cliente[0]['ingresos'] * 0.3
-
-        if (montomax < monto) {
-
-            monto_inusual = 'Si'
-        }
-
-        const id_cuota = id
-
-
-        const newLink = {
-            id_cuota,
-            monto,
-            cuil_cuit,
-            mes,
-            estado: estado,
-            anio,
-            cuil_cuit_administrador,
-            cuil_cuit_distinto,
-            monto_distinto,
-            monto_inusual,
-            ubicacion: filename,///////////aca ver el problema
-
-        };
-
-        await pool.query('INSERT INTO pagos SET ?', [newLink]);
-
-
-    } else { mensaje = 'una de las cuotas no estaba calculada' }
     try {
+        const { id_cuota, cuil_cuit: cuilAdministrador, fecha } = req.body || {};
 
+        if (!fecha) {
+            return res.status(400).json({ error: 'Falta la fecha del pago.' });
+        }
 
-
+        // --- 1) Pagos recibidos: se agrupan por cuota y se validan los montos ---
+        let recibidos;
         try {
-            await uploadFileToS3(formData.file, "mypdfstorage");
+            recibidos = JSON.parse(req.body.pagos);
+        } catch (e) {
+            return res.status(400).json({ error: 'No se pudo leer el detalle de las cuotas a pagar.' });
+        }
+        if (!Array.isArray(recibidos)) {
+            return res.status(400).json({ error: 'No se pudo leer el detalle de las cuotas a pagar.' });
+        }
 
+        const montoPorCuota = {};
+        for (const item of recibidos) {
+            const crudo = item && item.monto;
+            if (crudo === '' || crudo === null || crudo === undefined) continue; // casilla vacía
+            const id = parseInt(item && item.id_cuota, 10);
+            const monto = parseFloat(crudo);
+            if (!Number.isInteger(id) || !Number.isFinite(monto)) {
+                return res.status(400).json({ error: 'Hay una cuota o un monto inválido.' });
+            }
+            if (monto <= 0) continue; // las casillas vacías o en 0 se ignoran
+            montoPorCuota[id] = (montoPorCuota[id] || 0) + monto;
+        }
 
-        } catch { console.log(error) } res.json(['mensaje', aux])
+        const ids = Object.keys(montoPorCuota).map(Number);
+        if (ids.length === 0) {
+            return res.status(400).json({ error: 'Ingresá el monto de al menos una cuota.' });
+        }
 
+        // --- 2) Cuotas: existen, están calculadas y son del mismo cliente ---
+        const cuotas = await pool.query('SELECT * FROM cuotas WHERE id IN (?)', [ids]);
+        if (cuotas.length !== ids.length) {
+            return res.status(404).json({ error: 'Alguna de las cuotas no existe.' });
+        }
 
-    } catch (ex) {
+        const origen = id_cuota
+            ? (await pool.query('SELECT * FROM cuotas WHERE id = ?', [id_cuota]))[0]
+            : cuotas[0];
+        if (!origen) {
+            return res.status(404).json({ error: 'Cuota de origen no encontrada.' });
+        }
 
+        const cuit = (v) => String(v).replace(/\D/g, '');
+        const cuitCliente = cuit(origen.cuil_cuit);
+
+        for (const cuota of cuotas) {
+            if (cuit(cuota.cuil_cuit) !== cuitCliente) {
+                return res.status(400).json({ error: 'Todas las cuotas deben ser del mismo cliente.' });
+            }
+            if (String(cuota.parcialidad).toLowerCase() !== 'final') {
+                return res.status(400).json({
+                    error: 'La cuota ' + String(cuota.mes).padStart(2, '0') + '/' + cuota.anio + ' todavía no está calculada (falta cargar el ICC).'
+                });
+            }
+        }
+
+        const total = ids.reduce((acc, id) => acc + montoPorCuota[id], 0);
+
+        // --- 3) Coincidencia con movimientos bancarios (sobre el TOTAL recibido) ---
+        let monto_distinto = 'Si';
+        let mensaje = 'No coincide con movimientos cargados';
+
+        const movimientos = await pool.query(
+            'SELECT credito, descripcion, fecha FROM movimientos WHERE cuil_cuit = ? AND credito > 0',
+            [cuitCliente]
+        );
+        for (const mov of movimientos) {
+            if (parseFloat(mov.credito) === total) {
+                monto_distinto = 'No';
+                let fechaMov = mov.fecha;
+                if (fechaMov instanceof Date) {
+                    fechaMov = fechaMov.getFullYear() + '-' + String(fechaMov.getMonth() + 1).padStart(2, '0') + '-' + String(fechaMov.getDate()).padStart(2, '0');
+                }
+                mensaje = 'Coincide con movimiento (' + fechaMov + ') - ' + (mov.descripcion || '');
+                break;
+            }
+        }
+
+        // --- 4) Monto inusual: se evalúa sobre el total, no por cuota ---
+        let monto_inusual = 'No';
+        const clienteArr = await pool.query('SELECT * FROM clientes WHERE id = ?', [origen.id_cliente]);
+        if (clienteArr[0]) {
+            const montomax = await traerriesgo.montomaximodelicliente(clienteArr[0]);
+            if (total > montomax) monto_inusual = 'Si';
+        }
+
+        // --- 5) Guardado: un pago por cada cuota ---
+        for (const cuota of cuotas) {
+            const monto = montoPorCuota[cuota.id];
+            const result = await pool.query('INSERT INTO pagos SET ?', [{
+                id_cuota: cuota.id,
+                monto,
+                fecha,
+                cuil_cuit: cuitCliente,
+                mes: cuota.mes,
+                anio: cuota.anio,
+                estado: 'A',
+                cuil_cuit_administrador: cuilAdministrador,
+                cuil_cuit_distinto: 'No',
+                monto_distinto,
+                monto_inusual,
+                id_cbu: 0,
+                ubicacion: filename,
+                observaciones: ('Pago conjunto de ' + ids.length + ' cuotas por $' + total.toFixed(2)).slice(0, 190)
+            }]);
+            insertados.push(result.insertId);
+        }
+
+        // --- 6) Una sola alerta por pago inusual (con el total recibido) ---
+        if (monto_inusual === 'Si') {
+            await pool.query('INSERT INTO historial_pagosi SET ?', [{
+                id_cuota: cuotas[0].id,
+                monto: total,
+                cuil_cuit: cuitCliente,
+                mes: cuotas[0].mes,
+                id_pago: insertados[0],
+                estado: 'A',
+                anio: cuotas[0].anio,
+                zona: 'Otra',
+                proceso: 'averificarnivel3',
+                tipologia: 'Pago monto inusual',
+                cuil_cuit_administrador: cuilAdministrador,
+                ubicacion: filename,
+                fecha
+            }]);
+        }
+
+        res.json([
+            'Pago realizado en ' + ids.length + ' cuota' + (ids.length === 1 ? '' : 's') + ' - ' + mensaje,
+            origen.cuil_cuit,
+            origen.id_lote
+        ]);
+
+    } catch (error) {
+        console.error('❌ ERROR EN pagarnivel2varios:', error);
+
+        // Deshace lo ya guardado en esta carga para no dejar pagos a medias.
+        if (insertados.length) {
+            try {
+                await pool.query('DELETE FROM pagos WHERE id IN (?)', [insertados]);
+            } catch (e) {
+                console.error('No se pudieron deshacer los pagos parciales:', e);
+            }
+        }
+
+        res.status(500).json({
+            error: 'Error procesando el pago de varias cuotas',
+            detalle: error.message
+        });
     }
 }
 
