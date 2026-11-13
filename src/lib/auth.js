@@ -1,6 +1,10 @@
 const jwt = require("jsonwebtoken")
 const { hashf } = require('../keys.js')
 
+// Nivel 8 = visor del mapa PIT: no debe acceder a los datos de gestion (niveles 2, 3 y 4).
+// Los chequeos de abajo rechazan niveles MENORES, asi que un nivel alto pasaria; se lo excluye aca.
+const NIVEL_VISOR_PIT = 8
+
 module.exports = {
 
     // Decodificacion de token Logueado
@@ -95,7 +99,8 @@ module.exports = {
 
         if (
             !decodedToken.id ||
-            decodedToken.nivel < 2
+            decodedToken.nivel < 2 ||
+            decodedToken.nivel === NIVEL_VISOR_PIT
         ) {
 
             return res.send('error login')
@@ -147,7 +152,8 @@ module.exports = {
 
         if (
             !decodedToken.id ||
-            decodedToken.nivel < 3
+            decodedToken.nivel < 3 ||
+            decodedToken.nivel === NIVEL_VISOR_PIT
         ) {
 
             return res.send('error login')
@@ -199,7 +205,8 @@ module.exports = {
 
         if (
             !decodedToken.id ||
-            decodedToken.nivel < 4
+            decodedToken.nivel < 4 ||
+            decodedToken.nivel === NIVEL_VISOR_PIT
         ) {
 
             return res.send('error login')
