@@ -238,6 +238,60 @@ module.exports = {
         }
 
         return res.redirect('/profile')
+    },
+
+
+
+    // Acceso SOLO para los niveles indicados (coincidencia exacta, no "mayor o igual").
+    // Uso: nivelesPermitidos(8). Deja el token decodificado en req.usuarioToken.
+    nivelesPermitidos(...niveles) {
+
+        return (req, res, next) => {
+
+            const authorization = req.get('authorization')
+
+            let token = null
+
+            if (
+                authorization &&
+                authorization.startsWith('Bearer ')
+            ) {
+
+                token = authorization.substring(7)
+
+            }
+
+            if (!token) {
+
+                return res.send('error login')
+            }
+
+            let decodedToken = {}
+
+            try {
+
+                decodedToken = jwt.verify(
+                    token,
+                    hashf.key
+                )
+
+            } catch (error) {
+
+                return res.send('error login')
+            }
+
+            if (
+                !decodedToken.id ||
+                !niveles.includes(Number(decodedToken.nivel))
+            ) {
+
+                return res.send('error login')
+            }
+
+            req.usuarioToken = decodedToken
+
+            next()
+        }
     }
 
 }
