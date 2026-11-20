@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS pit_lotes_info (
     superficie VARCHAR(60) NULL,
     empresa VARCHAR(200) NULL,
     empresa_tipo VARCHAR(20) NULL,                    -- Boleto | Usufructo
+    situacion VARCHAR(20) NULL,                       -- Con boleto | Con obra | Operando | Caducado
     acceso_sin TINYINT(1) NOT NULL DEFAULT 0,
     acceso_tierra TINYINT(1) NOT NULL DEFAULT 0,
     acceso_ripio TINYINT(1) NOT NULL DEFAULT 0,
@@ -34,6 +35,16 @@ CREATE TABLE IF NOT EXISTS pit_lotes_info (
     actualizado_en DATETIME NULL,
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Si la tabla ya existia (creada antes de que existiera "situacion"), se le agrega la columna.
+-- Funciona en MySQL 5.7/8 y MariaDB; si la columna ya esta, no hace nada.
+SET @hay_situacion := (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pit_lotes_info' AND COLUMN_NAME = 'situacion');
+SET @agregar_situacion := IF(@hay_situacion = 0,
+    'ALTER TABLE pit_lotes_info ADD COLUMN situacion VARCHAR(20) NULL AFTER empresa_tipo', 'SELECT 1');
+PREPARE agregar_situacion FROM @agregar_situacion;
+EXECUTE agregar_situacion;
+DEALLOCATE PREPARE agregar_situacion;
 
 CREATE TABLE IF NOT EXISTS pit_lotes_historial (
     id INT AUTO_INCREMENT PRIMARY KEY,
