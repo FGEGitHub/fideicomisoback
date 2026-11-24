@@ -16,6 +16,8 @@ const pool = require('../database')
 
 const ESTADOS = ['DISPONIBLE', 'NO DISPONIBLE', 'RESERVADO']
 const TIPOS_EMPRESA = ['Boleto', 'Usufructo']
+// Situación del lote (dato aparte del estado/color): un desplegable en la ficha.
+const SITUACIONES = ['Con boleto', 'Con obra', 'Operando', 'Caducado']
 
 // campo -> largo máximo (columnas de texto)
 const TEXTOS = {
@@ -33,10 +35,34 @@ const FLAGS = [
     'energia_mt_bt', 'energia_alum_publ', 'fibra_optica', 'pasto_alto',
 ]
 
-const CAMPOS_PUBLICOS = [
+const camposPublicos = (conSituacion) => [
     'id_mapa', 'estado', ...Object.keys(TEXTOS).filter((c) => c !== 'observaciones'), 'empresa_tipo',
+    ...(conSituacion ? ['situacion'] : []),
     ...FLAGS, 'observaciones', 'actualizado_por', 'actualizado_en',
 ].join(', ')
+
+// La columna `situacion` se agregó después de crear la tabla. Si la base todavía no la tiene (falta correr
+// database/pit_lotes.sql) se intenta agregar sola; si no hay permiso, todo lo demás sigue funcionando sin ella.
+let verificacionSituacion = null
+const situacionDisponible = () => {
+    if (!verificacionSituacion) {
+        verificacionSituacion = (async () => {
+            try {
+                const hay = await pool.query(
+                    "SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pit_lotes_info' AND COLUMN_NAME = 'situacion'"
+                )
+                if (hay[0].n > 0) return true
+                await pool.query('ALTER TABLE pit_lotes_info ADD COLUMN situacion VARCHAR(20) NULL AFTER empresa_tipo')
+                return true
+            } catch (error) {
+                console.error('pit_lotes_info sin la columna "situacion" (correr database/pit_lotes.sql):', error.message)
+                verificacionSituacion = null // se reintenta en el próximo pedido
+                return false
+            }
+        })()
+    }
+    return verificacionSituacion
+}
 
 const ID_VALIDO = /^[A-Za-z0-9_-]{1,60}$/
 // Ids de los pins del mapa (los de los .geojson): pitdisponible-1, pitnodisponible-30, pitreservado-2...
@@ -44,7 +70,10 @@ const ID_PIN_PIT = /^pit(disponible|nodisponible|reservado)-\d{1,4}$/
 
 const listar = async (req, res) => {
     try {
-        const filas = await pool.query(`SELECT ${CAMPOS_PUBLICOS} FROM pit_lotes_info`)
+        const conSituacion = await situacionDisponible()
+        const filas = await pool.query(`SELECT ${camposPublicos(conSituacion)} FROM pit_lotes_info`)
+        // Son datos que se editan seguido: ningun navegador ni proxy intermedio debe guardarlos en cache.
+        res.set('Cache-Control', 'no-store')
         res.json(filas)
     } catch (error) {
         console.error('Error en pit listar:', error)
@@ -54,7 +83,7 @@ const listar = async (req, res) => {
 
 // Normaliza el cuerpo del pedido a { campo: valor } con SOLO los campos permitidos
 // que vinieron. Devuelve { datos } o { error }.
-const validar = (body) => {
+const validar = (body, conSituacion) => {
     const datos = {}
     if (body.estado !== undefined) {
         const estado = String(body.estado).trim().toUpperCase()
@@ -72,6 +101,15 @@ const validar = (body) => {
         if (v !== '' && !TIPOS_EMPRESA.includes(v)) return { error: 'Tipo de empresa inválido' }
         datos.empresa_tipo = v === '' ? null : v
     }
+    // Si la base no tiene la columna, la situación no se descarta en silencio: se avisa para que no parezca guardada.
+    if (!conSituacion && body.situacion !== undefined && String(body.situacion ?? '').trim() !== '') {
+        return { error: 'La base de datos todavía no tiene la columna "situación". Falta correr database/pit_lotes.sql en el servidor.' }
+    }
+    if (conSituacion && body.situacion !== undefined) {
+        const v = body.situacion === null ? '' : String(body.situacion).trim()
+        if (v !== '' && !SITUACIONES.includes(v)) return { error: 'Situación inválida' }
+        datos.situacion = v === '' ? null : v
+    }
     for (const flag of FLAGS) {
         if (body[flag] === undefined) continue
         datos[flag] = body[flag] === true || body[flag] === 1 || body[flag] === '1' || body[flag] === 'true' ? 1 : 0
@@ -83,7 +121,8 @@ const actualizar = async (req, res) => {
     const { id_mapa } = req.params
     if (!ID_VALIDO.test(id_mapa)) return res.status(400).json({ error: 'Identificador inválido' })
 
-    const { datos, error } = validar(req.body || {})
+    const conSituacion = await situacionDisponible()
+    const { datos, error } = validar(req.body || {}, conSituacion)
     if (error) return res.status(400).json({ error })
 
     try {
@@ -105,7 +144,7 @@ const actualizar = async (req, res) => {
             await pool.query('INSERT INTO pit_lotes_historial SET ?', [
                 { id_mapa, usuario, cambios: JSON.stringify({ ...cambiosAlta, alta: { antes: null, despues: 'primer guardado del lote' } }) },
             ])
-            const [creada] = await pool.query(`SELECT ${CAMPOS_PUBLICOS} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
+            const [creada] = await pool.query(`SELECT ${camposPublicos(conSituacion)} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
             return res.json(creada)
         }
 
@@ -116,7 +155,7 @@ const actualizar = async (req, res) => {
             if (String(antes ?? '') !== String(nuevo ?? '')) cambios[campo] = { antes, despues: nuevo }
         }
 
-        const [fila] = await pool.query(`SELECT ${CAMPOS_PUBLICOS} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
+        const [fila] = await pool.query(`SELECT ${camposPublicos(conSituacion)} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
         if (Object.keys(cambios).length === 0) return res.json({ ...fila, sinCambios: true })
 
         const cambiosDb = {}
@@ -130,7 +169,7 @@ const actualizar = async (req, res) => {
             { id_mapa, usuario, cambios: JSON.stringify(cambios) },
         ])
 
-        const [nueva] = await pool.query(`SELECT ${CAMPOS_PUBLICOS} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
+        const [nueva] = await pool.query(`SELECT ${camposPublicos(conSituacion)} FROM pit_lotes_info WHERE id_mapa = ?`, [id_mapa])
         res.json(nueva)
     } catch (err) {
         console.error('Error en pit actualizar:', err)
@@ -146,6 +185,7 @@ const historial = async (req, res) => {
             'SELECT id, usuario, cambios, creado_en FROM pit_lotes_historial WHERE id_mapa = ? ORDER BY id DESC LIMIT 50',
             [id_mapa]
         )
+        res.set('Cache-Control', 'no-store')
         res.json(filas.map((f) => ({ ...f, cambios: JSON.parse(f.cambios) })))
     } catch (error) {
         console.error('Error en pit historial:', error)
